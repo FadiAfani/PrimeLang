@@ -1,0 +1,11 @@
+fib x = if x <= 1 {
+    x;
+} else {
+    fib(x - 1) + fib(x - 2);
+}
+
+a = time()
+print(fib(25));
+b = time()
+
+print(b - a);
