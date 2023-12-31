@@ -48,6 +48,8 @@ data Expr = Add Token Expr Expr
     | Else {token :: Token, closure :: Expr}
     | List { listType :: Maybe PrimeType, listItems :: [Expr]}
     | ListIndex { listId :: Token, index :: Expr }
+    | Struct { structName :: Token, structArgs :: [Expr]}
+    | StructField { structName :: Token, fieldName :: Token}
     | For {token :: Token, cond :: Expr, closure :: Expr} deriving (Show, Eq)
 
 data Statement = Assignment {var :: Expr, assigned :: Expr}
@@ -481,6 +483,22 @@ parseStruct = do
         return ()
     else
         makeFailedParser "SyntaxError: strcuts can only be defined at the top-level"
+
+parseInitStruct :: Parser Expr
+parseInitStruct = do
+    id <- parseIdentifierToken <* many parseWhiteSpace
+    parseChar '{' <* many parseWhiteSpace
+    fstArg <- parseExpr <* many parseWhiteSpace
+    restArgs <- many $ parseChar ',' *> many parseWhiteSpace *> parseExpr
+    many parseWhiteSpace <* parseChar '}'
+    return $ Struct id $ fstArg : restArgs
+
+parseStructFieldAccess :: Parser Expr
+parseStructFieldAccess = do
+    id <- parseIdentifierToken
+    parseChar '.'
+    field <- parseIdentifierToken
+    return $ StructField id field
 
 
 -- f: x: number -> y: number -> z: number {
