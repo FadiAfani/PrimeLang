@@ -1,0 +1,10 @@
+Test suite test_parser: RUNNING...
+Cases: 6  Tried: 0  Errors: 0  Failures: 0Cases: 6  Tried: 1  Errors: 0  Failures: 0Cases: 6  Tried: 2  Errors: 0  Failures: 0                                          ### Failure in: 2:testParseStruct
+tests/TestParser.hs:34
+failure in parsing a struct
+Cases: 6  Tried: 3  Errors: 0  Failures: 1Cases: 6  Tried: 4  Errors: 0  Failures: 1Cases: 6  Tried: 5  Errors: 0  Failures: 1                                          ### Failure in: 5:testParseStructInitWithKey
+tests/TestParser.hs:54
+failure in parsing a key-value struct field
+Cases: 6  Tried: 6  Errors: 0  Failures: 2
+Test suite test_parser: PASS
+Test suite logged to: /home/fadi/CPrime/haskell/dist-newstyle/build/x86_64-linux/ghc-9.8.1/haskell-0.1.0.0/t/test_parser/test/haskell-0.1.0.0-test_parser.log

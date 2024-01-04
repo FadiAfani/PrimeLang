@@ -16,7 +16,7 @@ import Utils
 -- meaning it is used in an inner scope where it is not originally defined
 
 testOuterValue1 = TestCase (let  
-    var = mkDummyToken "x" Identifier
+    var = Literal $ mkDummyToken "x" Identifier
     clsr = Closure "" [ExprStmt $ Literal $ mkDummyToken "x" Identifier] $ M.fromList []
     mainClsr = Closure "" [Assignment var (Literal $ Token (0,0) "5" Number), ExprStmt clsr] $ M.fromList [("x", mkDummySymbol)]
     in case evalStateT (updateExpr mainClsr) (push (blockSyms mainClsr) $ initStack) of
@@ -28,7 +28,7 @@ testOuterValue1 = TestCase (let
 
 -- x = number + number -> x: number 
 testAddNumber = TestCase ( let
-    var = mkDummyToken "x" Identifier
+    var = Literal $ mkDummyToken "x" Identifier
     num = mkDummyToken "1" Number
     tok = mkDummyToken "+" Plus
     stmt = Assignment var $ Add tok (Literal num) (Literal num)
@@ -41,7 +41,7 @@ testAddNumber = TestCase ( let
 
 -- x = number * number -> x: number 
 testMultNumber = TestCase ( let
-    var = mkDummyToken "x" Identifier
+    var = Literal $ mkDummyToken "x" Identifier
     num = mkDummyToken "1" Number
     tok = mkDummyToken "*" Plus
     stmt = Assignment var $ Mult tok (Literal num) (Literal num)
@@ -55,7 +55,7 @@ testMultNumber = TestCase ( let
 -- also check for the case where the denominator is 0
 
 testDivNumber = TestCase ( let
-    var = mkDummyToken "x" Identifier
+    var = Literal $ mkDummyToken "x" Identifier
     num = mkDummyToken "1" Number
     tok = mkDummyToken "/" Plus
     stmt = Assignment var $ Div tok (Literal num) (Literal num)

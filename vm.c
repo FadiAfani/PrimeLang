@@ -350,6 +350,28 @@ void run(VM* vm) {
             as_list_obj->arr[(int) idx.number] = val;
             break;
         }
+        case OP_MK_STRUCT:
+        {
+            uint8_t n_fields = READ_BYTE(vm);
+            StructObj* obj = init_struct_obj();
+            Value* fields;
+            ALLOCATE(fields, Value, n_fields);
+            for (uint8_t i = 0; i < n_fields; i++) {
+                fields[i] = POP(vm);
+            }
+
+            obj->fields = fields;
+            PUSH(vm, ((Value) {.ref = obj, OBJECT}));
+            break;
+
+        }
+        case OP_ACCESS_FIELD:
+        {
+            uint8_t field_num = READ_BYTE(vm);
+            StructObj* obj = POP(vm).ref;
+            PUSH(vm, obj->fields[field_num]);
+            break;
+        }
         default:
             return;
         }

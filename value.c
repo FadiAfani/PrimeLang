@@ -37,6 +37,14 @@ ListObj* init_list_obj() {
     return ptr;
 }
 
+StructObj* init_struct_obj() {
+    Obj obj = {OBJ_STRUCT};
+    StructObj* struct_obj;
+    ALLOCATE(struct_obj, StructObj, 1);
+    struct_obj->fields = NULL;
+    return struct_obj;
+}
+
 bool valueIsNull (Value val) {
     return val.type == EMPTY; 
 }

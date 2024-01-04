@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module ScopeStack where
 
 import Data.Map as M
@@ -6,10 +8,17 @@ import Token
 import Types
 
 type Identifier = String
-data Symbol = Symbol {params :: [Token], symType :: Maybe PrimeType, ref :: Int, isOuterValue :: Bool} 
-    | StructSym { structName :: Token, fields :: M.Map String PrimeType } deriving (Show, Eq)
+type Order = Int
+data Symbol = Symbol {params :: [Token], symType :: Maybe PrimeType, ref :: Int, isOuterValue :: Bool}
+    -- symType below is wrapped in Maybe to avoid upsetting the compiler in the semantic analysis phase but otherwise it is not needed
+    | StructSym { structName :: Token, fields :: M.Map String (PrimeType, Order), symType :: Maybe PrimeType } deriving (Show, Eq)
 type SymbolTable = M.Map Identifier Symbol 
 type ScopeStack = S.Stack SymbolTable
+
+isSymbol :: Symbol -> Bool
+isSymbol = \case
+    Symbol {} -> True
+    _ -> False
 
 lookupStackTable :: Identifier -> S.Stack SymbolTable -> Maybe Symbol
 lookupStackTable id stack = go 0 where

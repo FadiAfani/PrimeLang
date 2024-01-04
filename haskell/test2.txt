@@ -1,5 +1,9 @@
-arr = [1, 2, 3]
-arr[0] = 10
-arr[1] = arr[1] * 3
+struct s {
+    a: number;
+    b: number;
+}
 
-print(arr[1]);
+x = s {a: 10, b: 20}
+
+print(x.b);
+

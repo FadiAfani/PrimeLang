@@ -45,7 +45,9 @@ typedef enum OpCode {
     OP_INDEX = 0x27,
     OP_MK_LIST = 0x28,
     OP_SET_LIST = 0x29,
-    OP_APPEND_LIST = 0x30
+    OP_APPEND_LIST = 0x30,
+    OP_MK_STRUCT = 0x31,
+    OP_ACCESS_FIELD = 0x32
 }OpCode;
 
 

@@ -1,0 +1,7 @@
+Test suite test_type_checker: RUNNING...
+Cases: 7  Tried: 0  Errors: 0  Failures: 0Cases: 7  Tried: 1  Errors: 0  Failures: 0Cases: 7  Tried: 2  Errors: 0  Failures: 0Cases: 7  Tried: 3  Errors: 0  Failures: 0Cases: 7  Tried: 4  Errors: 0  Failures: 0                                          ### Failure in: 4:testDivByZero
+tests/TestTypeChecker.hs:75
+division by zero should not compile
+Cases: 7  Tried: 5  Errors: 0  Failures: 1Cases: 7  Tried: 6  Errors: 0  Failures: 1                                          Cases: 7  Tried: 7  Errors: 0  Failures: 1
+Test suite test_type_checker: PASS
+Test suite logged to: /home/fadi/CPrime/haskell/dist-newstyle/build/x86_64-linux/ghc-9.8.1/haskell-0.1.0.0/t/test_type_checker/test/haskell-0.1.0.0-test_type_checker.log

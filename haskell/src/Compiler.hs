@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Compiler where
 
@@ -16,6 +17,7 @@ import Typechecker
 import qualified Stack as S
 import ScopeStack
 import Token
+import Types
 
 data KeyType = AnonKey Int | NamedKey String deriving (Show, Ord, Eq)
 type ConstTable = M.Map KeyType ([Word8], Int)
@@ -132,6 +134,12 @@ opSetList = 0x29
 opAppendList :: Word8
 opAppendList = 0x30
 
+opMkStruct :: Word8
+opMkStruct = 0x31 
+
+opAccessField :: Word8
+opAccessField = 0x32
+
 -- constant types 
 numberConst :: Word8
 numberConst = 0
@@ -234,6 +242,39 @@ compileExpr (ListIndex id idx) = do
         return $ opLoadL : extendByte (ref a) ++ idx' ++ [opIndex]
     else
         return $ opLoadOuter : fromIntegral d : extendByte (ref a) ++ idx' ++ [opIndex]
+
+compileExpr (Struct id fields) = do
+    let indexedFields = zip fields $ reverse [0 .. length fields - 1] -- reverse because the stack 'reverses' the fields
+    ws <- traverse compileField indexedFields
+    return $ concatMap fst (sortOn snd ws) ++ [opMkStruct, (fromIntegral $ length fields)]
+    where
+        compileField = \case
+            (ExprField expr, ord) -> do 
+                e <- compileExpr expr
+                return $ (e, ord)
+            (KeyField tok expr, _) -> do
+                e <- compileExpr expr
+                stack <- gets snd
+                let (StructSym struct fields _) = fromJust $ lookupStackTable (tokValue id) stack
+                let key = fromJust $ M.lookup (tokValue tok) fields
+                return $ (e, snd key)
+
+compileExpr (StructField id field) = do
+    stack <- gets snd
+    let (sym, d) = fromJust $ lookupStackWithDepth (tokValue id) stack
+    let (CustomType structName) = fromJust $ symType sym
+    let structSym = fromJust $ lookupStackTable structName stack
+    let f = fromJust $ M.lookup (tokValue field) $ fields structSym
+    if d == 0 then
+        return $ opLoadL : extendByte (ref sym) ++ [opAccessField , fromIntegral $ snd f]
+    else
+        return $ opLoadOuter : fromIntegral d : extendByte (ref sym) ++ [opAccessField , fromIntegral $ snd f]
+
+
+    
+    
+
+
 -- binary ops
 compileExpr (Add _ e1 e2) = liftA2 (++) (liftA2 (++) (compileExpr e1)  (compileExpr e2)) (pure [opAdd]) 
 compileExpr (Sub _ e1 e2) = liftA2 (++) (liftA2 (++) (compileExpr e1)  (compileExpr e2)) (pure [opSub]) 
@@ -261,7 +302,7 @@ compileExpr clsr@(Closure addr stmts syms) = do
     let bytesLen = extendByte $ length a + 1
     let consts = concatMap (fst . snd) $ sortOn (snd . snd) $ M.toList $ fst s'
     let constsLen = extendByte $ M.size $ fst s'
-    let num_keys = extendByte $ length $ filter isOuterValue $ M.elems syms
+    let num_keys = extendByte $ length $ filter (\x -> isSymbol x && isOuterValue x) $ M.elems syms
     let clsrData = closureConst : 0 : locsLen ++ bytesLen ++ num_keys ++ a ++ [opRet] ++ constsLen ++ consts 
     let idx = extendByte $ M.size s
     modify $ \(x,y) -> (M.insert (AnonKey $ M.size s)  (clsrData, M.size x) x, snd $ S.pop y)
@@ -299,7 +340,7 @@ compileStatement (Assignment var expr) = case var of
          
 
         if d == 0 then
-            if isOuterValue sym then do
+            if isSymbol sym && isOuterValue sym then do
                 let idx = extendByte $ ref sym
                 return $ res ++ opStoreL : idx ++ opLoadL : idx ++ opStoreOuter : 0 : idx
             else
@@ -320,5 +361,5 @@ compileStatement (Assignment var expr) = case var of
 
 
 compileStatement (ExprStmt expr) = compileExpr expr 
-
+compileStatement (Decl _) = return []
 

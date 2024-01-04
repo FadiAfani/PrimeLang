@@ -17,6 +17,7 @@ import ScopeStack
 import Token
 import Types
 
+data StructField = ExprField Expr | KeyField { fieldKey :: Token, fieldExpr :: Expr } deriving (Show, Eq)
 data ParserError = ParserError {pos :: (Int, Int), msg :: String}
 data ParserState = ParserState {curPos :: (Int, Int), input :: String, scopeStack :: S.Stack SymbolTable} deriving (Show, Eq)
 data Expr = Add Token Expr Expr 
@@ -48,13 +49,14 @@ data Expr = Add Token Expr Expr
     | Else {token :: Token, closure :: Expr}
     | List { listType :: Maybe PrimeType, listItems :: [Expr]}
     | ListIndex { listId :: Token, index :: Expr }
-    | Struct { structName :: Token, structArgs :: [Expr]}
+    | Struct { structName :: Token, structArgs :: [StructField] } 
     | StructField { structName :: Token, fieldName :: Token}
     | For {token :: Token, cond :: Expr, closure :: Expr} deriving (Show, Eq)
 
 data Statement = Assignment {var :: Expr, assigned :: Expr}
     | Def { defId :: Token, defType :: PrimeType}
     | DataType { inputTypes :: [Token], constructors :: [Statement] }
+    | Decl ()
     | ExprStmt Expr deriving (Show, Eq)
 
 type Parser a = StateT ParserState (Either ParserError) a
@@ -224,7 +226,7 @@ parseLiteral = Literal <$> (parseNumberToken
     )
 
 parsePrimary :: Parser Expr
-parsePrimary = parseGroupedExpr <|> parseFuncCall <|> parseList <|> parseListIndex <|> parseLiteral
+parsePrimary = parseGroupedExpr <|> parseFuncCall <|> parseList <|> parseListIndex <|> parseInitStruct <|> parseStructFieldAccess <|> parseLiteral
 
 parseFactor :: Parser Expr 
 parseFactor = do
@@ -401,10 +403,14 @@ parseIdentAssignment = do
 parseAssignment :: Parser Statement
 parseAssignment = parseIdentAssignment <|> parseIndexAssignment
 
+parseDecl :: Parser Statement
+parseDecl = Decl <$> parseStruct
+
 parseStatement :: Parser Statement
 parseStatement = (many parseWhiteSpace) 
     *> ( parseAssignment
     <|> parseExprStatement
+    <|> parseDecl
     )
     <* (many parseWhiteSpace)
 
@@ -475,23 +481,41 @@ parseStruct = do
         parseRawToken Keyword "struct" <* many parseWhiteSpace
         tok <- parseIdentifierToken <* many parseWhiteSpace
         parseChar '{' <* many parseWhiteSpace
-        fields <- many parseDefWithId <* many parseRowSpace <* parseChar ';'
+        fields <- many $ parseDefWithId <* many parseRowSpace <* parseChar ';' <* many parseWhiteSpace
+        let orderedFields = zipWith (\a b -> (fst a, (snd a, b))) fields $ [0 .. length fields - 1]
         many parseWhiteSpace
         parseChar '}'
-        let sym = StructSym tok $ M.fromList $ map (\t -> (tokValue $ fst t, snd t)) fields
+        let sym = StructSym tok ( M.fromList $ map (\t -> (tokValue $ fst t, snd t)) orderedFields) $ Just $ CustomType (tokValue tok)
         modify $ \s -> s { scopeStack = insertTop (tokValue tok) sym $ scopeStack s}
         return ()
     else
-        makeFailedParser "SyntaxError: strcuts can only be defined at the top-level"
+        makeFailedParser "SyntaxError: structs can only be defined at the top-level"
 
 parseInitStruct :: Parser Expr
 parseInitStruct = do
     id <- parseIdentifierToken <* many parseWhiteSpace
     parseChar '{' <* many parseWhiteSpace
-    fstArg <- parseExpr <* many parseWhiteSpace
-    restArgs <- many $ parseChar ',' *> many parseWhiteSpace *> parseExpr
+    fstArg <- parseField <* many parseWhiteSpace
+    restArgs <- many $ parseChar ',' *> many parseWhiteSpace *> parseField
     many parseWhiteSpace <* parseChar '}'
     return $ Struct id $ fstArg : restArgs
+    where
+        parseKeyField :: Parser StructField
+        parseKeyField = do
+            key <- parseIdentifierToken <* many parseRowSpace 
+            parseChar ':' <* many parseRowSpace
+            expr <- parseExpr
+            return $ KeyField key expr
+
+        parseField :: Parser StructField 
+        parseField = do
+            key <- optional parseKeyField
+            case key of
+                Just k -> return k
+                Nothing -> do 
+                    expr <- parseExpr
+                    return $ ExprField expr
+
 
 parseStructFieldAccess :: Parser Expr
 parseStructFieldAccess = do

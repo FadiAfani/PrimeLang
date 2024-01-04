@@ -27,7 +27,40 @@ testParseListIndex = TestCase ( let
         Left err -> assertFailure "failure in parsing an indexing operation"
     )
 
-tests = TestList [TestLabel "testParseList" testParseList, TestLabel "testParseListIndex" testParseListIndex]
+testParseStruct = TestCase ( let
+    st = ParserState (1,0) "struct test { field1: Number; \n field2: String }" initStack
+    in case execStateT parseStruct st of
+        Right a -> assertEqual "test struct parsing (tests if the string was consumed)" "" $ input a
+        Left err -> assertFailure "failure in parsing a struct"
+        )
+
+testParseStructInit = TestCase ( let 
+    st = ParserState (1,0) "test { 10, 20 }" initStack
+    in case execStateT parseInitStruct st of
+        Right a -> assertEqual "test struct initialization" "" $ input a 
+        Left err -> assertFailure "failure in parsing a struct initialization block"
+        )
+testParseStructFieldAccess = TestCase ( let 
+    st = ParserState (1,0) "structName.field1" initStack
+    in case execStateT parseStructFieldAccess st of
+        Right a -> assertEqual "test struct field access" "" $ input a
+        Left err -> assertFailure "failure in parsing a struct field access"
+        )
+
+testParseStructInitWithKey = TestCase ( let
+    st = ParserState (1,0) "structName { field1: 10, field2: 20 }" initStack
+    in case execStateT parseInitStruct st of
+        Right a -> assertEqual "test struct initialization using key-value syntax" "" $ input a
+        Left err -> assertFailure "failure in parsing a key-value struct field"
+    )
+
+tests = TestList [TestLabel "testParseList" testParseList,
+    TestLabel "testParseListIndex" testParseListIndex,
+    TestLabel "testParseStruct" testParseStruct,
+    TestLabel "testParseStructInit" testParseStructInit,
+    TestLabel "testParseStructFieldAccess" testParseStructFieldAccess,
+    TestLabel "testParseStructInitWithKey" testParseStructInitWithKey
+    ]
 
 main :: IO Counts 
 main = runTestTT tests 

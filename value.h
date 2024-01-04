@@ -16,7 +16,8 @@ typedef struct {
         OBJ_FUNC,
         OBJ_STRING,
         OBJ_NATIVE,
-        OBJ_LIST
+        OBJ_LIST,
+        OBJ_STRUCT
     }ObjType;
     
 }Obj;
@@ -53,10 +54,15 @@ typedef struct {
     size_t list_len;
 }ListObj;
 
+typedef struct {
+    Value* fields;
+}StructObj;
+
 
 ClosureObj* init_closure(uint8_t* insts, Value* consts, uint16_t n_locals, uint8_t arity);
 StringObj* init_string_obj(char* str, uint16_t len);
 ListObj* init_list_obj();
+StructObj* init_struct_obj();
 bool valueIsNull(Value val);
 
 #endif

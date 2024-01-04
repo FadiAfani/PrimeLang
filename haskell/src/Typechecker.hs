@@ -8,6 +8,7 @@ import qualified Data.Map as M
 import Data.Maybe (fromJust, isNothing, isJust)
 import Control.Applicative
 import GHC.List (unsnoc)
+import Data.List (find)
 import Types
 import ScopeStack 
 import Token
@@ -199,6 +200,27 @@ getExprType (ListIndex listId idx) = do
        Just a -> return $ symType a
        Nothing -> return Nothing
 
+getExprType (Struct id fields) = 
+    if (isJust $ find isKeyField fields) && (isJust $ find isExprField fields) then 
+        reportError $ CompilationError (tokPos id) $ "Syntax Error: structs cannot have a mixture of key/expression and expression fields"
+    else
+        return $ Just $ CustomType (tokValue id)
+    where
+        isKeyField = \case
+            KeyField _ _ -> True
+            _ -> False
+        isExprField = \case
+            ExprField _ -> True
+            _ -> False
+getExprType (StructField id field) = do
+    stack <- get
+    let name = tokValue id
+    case lookupStackTable name stack of
+        Just a -> case M.lookup (tokValue field) (fields a) of
+            Just f -> return $ Just $ fst f
+            Nothing -> reportError $ CompilationError (tokPos field) $ "Invalid Field Access: struct " ++ name ++ " does not have a field " ++ show (tokValue field)
+        Nothing -> reportError $ CompilationError (tokPos id) $ "Undefined Symbol: '" ++ name ++ "' is not defined"
+
 getExprType _ = return $ Just NumberType 
 
 reportError :: CompilationError -> StateT ScopeStack (Either CompilationError) a 
@@ -311,6 +333,7 @@ updateStatement (Assignment var expr) = case var of
         return $ Assignment left right
 
 updateStatement (ExprStmt expr) = ExprStmt <$> updateExpr expr
+updateStatement (Decl _) = return $ Decl ()
 
 updateAST :: [Statement] -> StateT ScopeStack (Either CompilationError) [Statement]
 updateAST = traverse updateStatement
