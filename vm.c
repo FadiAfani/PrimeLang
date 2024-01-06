@@ -372,6 +372,16 @@ void run(VM* vm) {
             PUSH(vm, obj->fields[field_num]);
             break;
         }
+        
+        case OP_SET_FIELD:
+        {
+            uint8_t field_num = READ_BYTE(vm);
+            StructObj* obj = POP(vm).ref;
+            Value val_to_set = POP(vm);
+            obj->fields[field_num] = val_to_set;
+            break;
+        }
+
         default:
             return;
         }

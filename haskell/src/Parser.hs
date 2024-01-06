@@ -400,8 +400,15 @@ parseIdentAssignment = do
                 let addr = show size ++ "clsr"
                 return $ Assignment id $ Closure addr [ExprStmt expr] paramMap 
 
+parseFieldAssignment :: Parser Statement
+parseFieldAssignment = do
+    f <- parseStructFieldAccess <* many parseRowSpace
+    parseChar '=' <* many parseRowSpace
+    expr <- parseExpr
+    return $ Assignment f expr 
+
 parseAssignment :: Parser Statement
-parseAssignment = parseIdentAssignment <|> parseIndexAssignment
+parseAssignment = parseIdentAssignment <|> parseIndexAssignment <|> parseFieldAssignment
 
 parseDecl :: Parser Statement
 parseDecl = Decl <$> parseStruct
@@ -477,19 +484,16 @@ parseDefWithId = do
 parseStruct :: Parser ()
 parseStruct = do
     stack <- gets $ scopeStack
-    if stackSize stack == 1 then do 
-        parseRawToken Keyword "struct" <* many parseWhiteSpace
-        tok <- parseIdentifierToken <* many parseWhiteSpace
-        parseChar '{' <* many parseWhiteSpace
-        fields <- many $ parseDefWithId <* many parseRowSpace <* parseChar ';' <* many parseWhiteSpace
-        let orderedFields = zipWith (\a b -> (fst a, (snd a, b))) fields $ [0 .. length fields - 1]
-        many parseWhiteSpace
-        parseChar '}'
-        let sym = StructSym tok ( M.fromList $ map (\t -> (tokValue $ fst t, snd t)) orderedFields) $ Just $ CustomType (tokValue tok)
-        modify $ \s -> s { scopeStack = insertTop (tokValue tok) sym $ scopeStack s}
-        return ()
-    else
-        makeFailedParser "SyntaxError: structs can only be defined at the top-level"
+    parseRawToken Keyword "struct" <* many parseWhiteSpace
+    tok <- parseIdentifierToken <* many parseWhiteSpace
+    parseChar '{' <* many parseWhiteSpace
+    fields <- many $ parseDefWithId <* many parseRowSpace <* parseChar ';' <* many parseWhiteSpace
+    let orderedFields = zipWith (\a b -> (fst a, (snd a, b))) fields $ [0 .. length fields - 1]
+    many parseWhiteSpace
+    parseChar '}'
+    let sym = StructSym tok ( M.fromList $ map (\t -> (tokValue $ fst t, snd t)) orderedFields) $ Just $ CustomType (tokValue tok)
+    modify $ \s -> s { scopeStack = insertTop (tokValue tok) sym $ scopeStack s}
+    return ()
 
 parseInitStruct :: Parser Expr
 parseInitStruct = do

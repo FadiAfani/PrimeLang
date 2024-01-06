@@ -140,6 +140,9 @@ opMkStruct = 0x31
 opAccessField :: Word8
 opAccessField = 0x32
 
+opSetField :: Word8
+opSetField = 0x33
+
 -- constant types 
 numberConst :: Word8
 numberConst = 0
@@ -335,7 +338,9 @@ compileStatement (Assignment var expr) = case var of
                 let newIdx = M.size $ fst newS
                 let newInsts = opConst : extendByte newIdx
                 modify $ \(a, b) -> (M.insert ( NamedKey varName ) ((x:arity:ys), M.size $ fst newS) a, b)
-                return $ newInsts 
+                return $ newInsts
+
+
             _ -> compileExpr expr
          
 
@@ -359,7 +364,23 @@ compileStatement (Assignment var expr) = case var of
         else
             return $ opLoadOuter : (fromIntegral d) : extendByte (ref sym) ++ idx' ++ expr' ++ [opSetList]
 
+    StructField structTok fieldTok -> do
+        stack <- gets snd
+        let (sym, d) = fromJust $ lookupStackWithDepth (tokValue structTok) stack
+        let (CustomType structName) = fromJust $ symType sym
+        let structSym = fromJust $ lookupStackTable structName stack
+        let (field, order) =  fromJust $ M.lookup (tokValue fieldTok) $ fields structSym
+        expr' <- compileExpr expr
+        if d == 0 then
+            return $ expr' ++ opLoadL : extendByte (ref sym) ++ [opSetField, fromIntegral order]
+         else 
+            return $ expr' ++ opLoadOuter : (fromIntegral d) : extendByte (ref sym) ++ [opSetField, fromIntegral order]
+
+
+
 
 compileStatement (ExprStmt expr) = compileExpr expr 
 compileStatement (Decl _) = return []
+
+
 

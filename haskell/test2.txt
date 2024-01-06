@@ -1,9 +1,15 @@
-struct s {
+struct st {
     a: number;
     b: number;
 }
 
-x = s {a: 10, b: 20}
+struct s {
+    a: st;
+    b: number;
+}
 
-print(x.b);
+y = st { 1, 2 }
+x = s {a: y, b: 20}
+print(x.a.a);
+
 
