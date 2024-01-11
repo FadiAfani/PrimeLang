@@ -212,14 +212,22 @@ getExprType (Struct id fields) =
         isExprField = \case
             ExprField _ -> True
             _ -> False
-getExprType (StructField id field) = do
+
+getExprType (StructField head fieldChain) = do
     stack <- get
-    let name = tokValue id
-    case lookupStackTable name stack of
-        Just a -> case M.lookup (tokValue field) (fields a) of
-            Just f -> return $ Just $ fst f
-            Nothing -> reportError $ CompilationError (tokPos field) $ "Invalid Field Access: struct " ++ name ++ " does not have a field " ++ show (tokValue field)
-        Nothing -> reportError $ CompilationError (tokPos id) $ "Undefined Symbol: '" ++ name ++ "' is not defined"
+    case runStateT (go head fieldChain) stack of
+        Right (a, s) -> return $ Just a
+        Left err -> reportError err
+    where
+        go cur (f:fs) = do
+            stack <- get
+            getExprType $ Literal cur
+            let sym = fromJust $ lookupStackTable (tokValue cur) stack
+            case M.lookup (tokValue f) (fields sym) of
+                Just t -> case fs of
+                    [] -> return $ fst t
+                    _ -> go f fs
+                Nothing -> reportError $ CompilationError (tokPos f) $ "Invalid Field: this struct does not have a field " ++ (tokValue f)
 
 getExprType _ = return $ Just NumberType 
 

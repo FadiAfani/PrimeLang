@@ -49,8 +49,8 @@ data Expr = Add Token Expr Expr
     | Else {token :: Token, closure :: Expr}
     | List { listType :: Maybe PrimeType, listItems :: [Expr]}
     | ListIndex { listId :: Token, index :: Expr }
-    | Struct { structName :: Token, structArgs :: [StructField] } 
-    | StructField { structName :: Token, fieldName :: Token}
+    | Struct { structTok :: Token, structArgs :: [StructField] } 
+    | StructField { structHead :: Token, fieldList :: [Token]}
     | For {token :: Token, cond :: Expr, closure :: Expr} deriving (Show, Eq)
 
 data Statement = Assignment {var :: Expr, assigned :: Expr}
@@ -521,14 +521,13 @@ parseInitStruct = do
                     return $ ExprField expr
 
 
+-- <field-access> := (<Identifier> '.')+ <Identifier>
+
 parseStructFieldAccess :: Parser Expr
 parseStructFieldAccess = do
-    id <- parseIdentifierToken
-    parseChar '.'
-    field <- parseIdentifierToken
-    return $ StructField id field
-
-
+    head <- parseIdentifierToken
+    fieldChain <- some $ parseChar '.' *> parseIdentifierToken
+    return $ StructField head fieldChain
 -- f: x: number -> y: number -> z: number {
 -- }
 

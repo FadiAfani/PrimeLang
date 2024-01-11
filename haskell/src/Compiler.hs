@@ -262,17 +262,24 @@ compileExpr (Struct id fields) = do
                 let key = fromJust $ M.lookup (tokValue tok) fields
                 return $ (e, snd key)
 
-compileExpr (StructField id field) = do
+compileExpr (StructField head fieldChain) = do
     stack <- gets snd
-    let (sym, d) = fromJust $ lookupStackWithDepth (tokValue id) stack
-    let (CustomType structName) = fromJust $ symType sym
-    let structSym = fromJust $ lookupStackTable structName stack
-    let f = fromJust $ M.lookup (tokValue field) $ fields structSym
-    if d == 0 then
-        return $ opLoadL : extendByte (ref sym) ++ [opAccessField , fromIntegral $ snd f]
-    else
-        return $ opLoadOuter : fromIntegral d : extendByte (ref sym) ++ [opAccessField , fromIntegral $ snd f]
-
+    let fieldNumList = go head fieldChain stack
+    head' <- compileExpr $ Literal head
+    return $ head' ++ fieldNumList
+    where
+        go :: Token -> [Token] -> ScopeStack -> [Word8]
+        go struct (f:fs) stack = let
+            -- fromJust is problematic, move these 3 lines to the top    
+            sym = fromJust $ lookupStackTable (tokValue struct) stack
+            (CustomType stName) = fromJust $ symType sym
+            structSym = fromJust $ lookupStackTable stName stack
+            field = fromJust $ M.lookup (tokValue f) $ fields structSym
+            (CurryType [CustomType fieldName]) = fst field
+            fieldTok = structName . fromJust $ lookupStackTable fieldName stack
+            in case fs of
+                [] -> [opAccessField, fromIntegral $ snd field]
+                _ -> [opAccessField, fromIntegral $ snd field] ++ go fieldTok fs stack
 
     
     
@@ -364,17 +371,21 @@ compileStatement (Assignment var expr) = case var of
         else
             return $ opLoadOuter : (fromIntegral d) : extendByte (ref sym) ++ idx' ++ expr' ++ [opSetList]
 
-    StructField structTok fieldTok -> do
+    StructField head fieldChain -> do
         stack <- gets snd
-        let (sym, d) = fromJust $ lookupStackWithDepth (tokValue structTok) stack
-        let (CustomType structName) = fromJust $ symType sym
-        let structSym = fromJust $ lookupStackTable structName stack
-        let (field, order) =  fromJust $ M.lookup (tokValue fieldTok) $ fields structSym
-        expr' <- compileExpr expr
-        if d == 0 then
-            return $ expr' ++ opLoadL : extendByte (ref sym) ++ [opSetField, fromIntegral order]
-         else 
-            return $ expr' ++ opLoadOuter : (fromIntegral d) : extendByte (ref sym) ++ [opSetField, fromIntegral order]
+        head' <- compileExpr $ Literal head
+        return $ head' ++ go head fieldChain stack
+        where
+            go :: Token -> [Token] -> ScopeStack -> [Word8]
+            go struct [f] stack = let
+                sym = fromJust $ lookupStackTable (tokValue struct) stack
+                fNum = snd . fromJust $ M.lookup (tokValue f) $ fields sym
+                in [opSetField, fromIntegral fNum]
+            go struct (f:fs) stack = let
+                sym = fromJust $ lookupStackTable (tokValue struct) stack
+                fNum = snd . fromJust $ M.lookup (tokValue f) $ fields sym
+                in opAccessField : (fromIntegral fNum) : go f fs stack
+
 
 
 

@@ -9,7 +9,6 @@ struct s {
 }
 
 y = st { 1, 2 }
-x = s {a: y, b: 20}
+x = s { y, 10 }
+
 print(x.a.a);
-
-
