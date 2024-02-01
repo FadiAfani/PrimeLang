@@ -11,7 +11,9 @@ type Identifier = String
 type Order = Int
 data Symbol = Symbol {params :: [Token], symType :: Maybe PrimeType, ref :: Int, isOuterValue :: Bool}
     -- symType below is wrapped in Maybe to avoid upsetting the compiler in the semantic analysis phase but otherwise it is not needed
-    | StructSym { structName :: Token, fields :: M.Map String (PrimeType, Order), symType :: Maybe PrimeType } deriving (Show, Eq)
+    | StructSym { structName :: Token, fields :: M.Map String (PrimeType, Order), symType :: Maybe PrimeType } 
+    | TupleTypeSym { typeName :: Token, generics :: [Token], subTypes :: [PrimeType], symType :: Maybe PrimeType } 
+    | EnumSym { enumName :: Token, symType :: Maybe PrimeType } deriving (Show, Eq)
 type SymbolTable = M.Map Identifier Symbol 
 type ScopeStack = S.Stack SymbolTable
 

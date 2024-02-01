@@ -374,17 +374,20 @@ compileStatement (Assignment var expr) = case var of
     StructField head fieldChain -> do
         stack <- gets snd
         head' <- compileExpr $ Literal head
-        return $ head' ++ go head fieldChain stack
+        expr' <- compileExpr expr
+        return $ expr' ++ head' ++ go head fieldChain stack
         where
             go :: Token -> [Token] -> ScopeStack -> [Word8]
-            go struct [f] stack = let
-                sym = fromJust $ lookupStackTable (tokValue struct) stack
-                fNum = snd . fromJust $ M.lookup (tokValue f) $ fields sym
-                in [opSetField, fromIntegral fNum]
             go struct (f:fs) stack = let
                 sym = fromJust $ lookupStackTable (tokValue struct) stack
-                fNum = snd . fromJust $ M.lookup (tokValue f) $ fields sym
-                in opAccessField : (fromIntegral fNum) : go f fs stack
+                (CustomType stName) = fromJust $ symType sym
+                structSym = fromJust $ lookupStackTable stName stack
+                field = fromJust $ M.lookup (tokValue f) $ fields structSym
+                (CurryType [CustomType fieldName]) = fst field
+                fieldTok = structName . fromJust $ lookupStackTable fieldName stack
+                in case fs of
+                    [] -> [opSetField, fromIntegral $ snd field]
+                    _ -> [opAccessField, fromIntegral $ snd field] ++ go fieldTok fs stack
 
 
 

@@ -3,12 +3,11 @@ struct st {
     b: number;
 }
 
-struct s {
-    a: st;
-    b: number;
+
+var = st { 10, 20 }
+
+updateVar x = {
+    x.a;
 }
 
-y = st { 1, 2 }
-x = s { y, 10 }
-
-print(x.a.a);
+updateVar(var);

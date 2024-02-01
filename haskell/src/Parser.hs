@@ -55,8 +55,8 @@ data Expr = Add Token Expr Expr
 
 data Statement = Assignment {var :: Expr, assigned :: Expr}
     | Def { defId :: Token, defType :: PrimeType}
-    | DataType { inputTypes :: [Token], constructors :: [Statement] }
-    | Decl ()
+    | DataTypeDecl Token [Token]
+    | StructDecl Token 
     | ExprStmt Expr deriving (Show, Eq)
 
 type Parser a = StateT ParserState (Either ParserError) a
@@ -407,6 +407,48 @@ parseFieldAssignment = do
     expr <- parseExpr
     return $ Assignment f expr 
 
+parseTypeAssignment :: Parser Statement 
+parseTypeAssignment = do
+    parseRawToken Keyword "type" <* many parseRowSpace
+    id <- parseIdentifierToken
+    firstGen <- parseChar '<' *> many parseRowSpace *> parseIdentifierToken
+    restGens <- parseGens <* many parseRowSpace
+    parseChar '=' <* many parseRowSpace
+    firstSubType <- parseSubType <* many parseWhiteSpace
+    restSubTypes <- parseSubTypeChain
+    return $ StructDecl id
+    where
+
+        parseTuple = do
+            id <- parseIdentifierToken <* many parseWhiteSpace
+            parseChar '(' <* many parseWhiteSpace
+            fstField <- parseIdentifierToken <* many parseWhiteSpace
+            rest <- many (do 
+                parseChar ',' <* many parseWhiteSpace
+                parseIdentifierToken
+                )
+            return $ DataTypeDecl id $ fstField : rest
+
+        parseGens = many (do
+            parseChar ',' <* many parseRowSpace
+            parseIdentifierToken )
+
+        parseSubType = do
+            isTuple <- optional parseTuple 
+            case isTuple of
+                Just r -> return r
+                Nothing -> do
+                    id <- parseIdentifierToken
+                    return $ EnumType $ tokValue id
+
+        parseSubTypeChain = many (do
+            parseChar '|' <* many parseWhiteSpace
+            parseSubType)
+
+     
+    
+
+
 parseAssignment :: Parser Statement
 parseAssignment = parseIdentAssignment <|> parseIndexAssignment <|> parseFieldAssignment
 
@@ -481,7 +523,7 @@ parseDefWithId = do
     def <- parseDef
     return $ (tok, def)
 
-parseStruct :: Parser ()
+parseStruct :: Parser Token
 parseStruct = do
     stack <- gets $ scopeStack
     parseRawToken Keyword "struct" <* many parseWhiteSpace
@@ -493,7 +535,7 @@ parseStruct = do
     parseChar '}'
     let sym = StructSym tok ( M.fromList $ map (\t -> (tokValue $ fst t, snd t)) orderedFields) $ Just $ CustomType (tokValue tok)
     modify $ \s -> s { scopeStack = insertTop (tokValue tok) sym $ scopeStack s}
-    return ()
+    return tok 
 
 parseInitStruct :: Parser Expr
 parseInitStruct = do

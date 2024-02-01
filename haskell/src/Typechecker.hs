@@ -222,12 +222,17 @@ getExprType (StructField head fieldChain) = do
         go cur (f:fs) = do
             stack <- get
             getExprType $ Literal cur
-            let sym = fromJust $ lookupStackTable (tokValue cur) stack
-            case M.lookup (tokValue f) (fields sym) of
+            let varSym = fromJust $ lookupStackTable (tokValue cur) stack
+            let (CustomType structName) = fromJust $ symType varSym
+            let structSym = fromJust $ lookupStackTable structName stack
+
+            -- this causes a selector error (fields)
+            case M.lookup (tokValue f) (fields structSym) of
                 Just t -> case fs of
                     [] -> return $ fst t
                     _ -> go f fs
                 Nothing -> reportError $ CompilationError (tokPos f) $ "Invalid Field: this struct does not have a field " ++ (tokValue f)
+
 
 getExprType _ = return $ Just NumberType 
 
@@ -317,6 +322,9 @@ updateExpr = \case
 
     FuncCall tok args -> do
         args' <- traverse updateExpr args
+        argTypes <- traverse getExprType args
+        let argTypes' = map fromJust argTypes
+        modify $ adjustStackTable (tokValue tok) (\a -> a { symType = Just $ CurryType argTypes' })
         s <- get
         case lookupTop (tokValue tok) s of 
             Just _ -> return ()
@@ -326,6 +334,17 @@ updateExpr = \case
     List listType exprs -> do 
         exprs' <- traverse updateExpr exprs
         return $ List listType exprs'
+
+    Struct tok args -> do
+        args' <- traverse updateArg args
+        return $ Struct tok args'
+        where
+            updateArg = \case
+                ExprField expr -> ExprField <$> updateExpr expr
+                KeyField tok expr -> KeyField tok <$> updateExpr expr
+
+
+
 
     e -> return e
 updateStatement :: Statement -> StateT ScopeStack (Either CompilationError) Statement
