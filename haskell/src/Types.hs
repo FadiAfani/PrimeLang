@@ -3,7 +3,6 @@ module Types where
 import Token
 import qualified Data.Map as M
 
-data SubType = RecordType String | EnumType String deriving (Show, Eq)
 
 data PrimeType = NumberType
     | StringType

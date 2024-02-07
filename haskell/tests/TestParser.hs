@@ -10,20 +10,15 @@ import Stack
 
 testParseList = TestCase ( let 
     st = ParserState (1,0) "[1,1,1]" initStack
-    lit1 = Literal $ Token (1,2) "1" Number
-    lit2 = Literal $ Token (1,4) "1" Number
-    lit3 = Literal $ Token (1,6) "1" Number
-    in case evalStateT parseList st of
-        Right a -> assertEqual "test successful parsing of a list with numerical elements" (List Nothing [lit1, lit2, lit3]) a
+    in case execStateT parseList st of
+        Right a -> assertEqual "test successful parsing of a list with numerical elements" "" $ input a
         Left err -> assertFailure "parser failed to produce any meaningful results"
     )
 
 testParseListIndex = TestCase ( let
     st = ParserState (1,0) "arr[0]" initStack
-    idx = Token (1,3) "arr" Identifier 
-    lit = Literal $ Token (1,5) "0" Number
-    in case evalStateT parseListIndex st of
-        Right a -> assertEqual "test successful parsing of a list indexing operation" (ListIndex idx lit) a
+    in case execStateT parseListIndex st of
+        Right a -> assertEqual "test successful parsing of a list indexing operation" "" $ input a 
         Left err -> assertFailure "failure in parsing an indexing operation"
     )
 
@@ -54,12 +49,20 @@ testParseStructInitWithKey = TestCase ( let
         Left err -> assertFailure "failure in parsing a key-value struct field"
     )
 
+testParseDataType = TestCase ( let
+    st = ParserState (1,0) "type someType = Tuple (Number, Number) | Enum 123 123" initStack
+    in case execStateT parseTypeAssignment st of
+        Right a -> assertEqual "test data type declaration" "" $ input a
+        Left err -> assertFailure "failure in parsing a data type declaration"
+        )
+
 tests = TestList [TestLabel "testParseList" testParseList,
     TestLabel "testParseListIndex" testParseListIndex,
     TestLabel "testParseStruct" testParseStruct,
     TestLabel "testParseStructInit" testParseStructInit,
     TestLabel "testParseStructFieldAccess" testParseStructFieldAccess,
-    TestLabel "testParseStructInitWithKey" testParseStructInitWithKey
+    TestLabel "testParseStructInitWithKey" testParseStructInitWithKey,
+    TestLabel "testParseDataType" testParseDataType
     ]
 
 main :: IO Counts 

@@ -33,7 +33,7 @@ executable haskell
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules: Compiler, Typechecker, Parser, Types, ScopeStack, Stack, Token
+    other-modules: Compiler, Typechecker, Parser, Types, ScopeStack, Stack, Token, Utils
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -45,7 +45,7 @@ Test-Suite test_type_checker
 
     type: exitcode-stdio-1.0
     main-is: TestTypeChecker.hs
-    other-modules: Typechecker, Parser, ScopeStack, Stack, Token, Types
+    other-modules: Typechecker, Parser, ScopeStack, Stack, Token, Types, Utils
     hs-source-dirs:
         tests,
         src
@@ -56,7 +56,7 @@ Test-Suite test_type_checker
 Test-Suite test_parser
     type: exitcode-stdio-1.0
     main-is: TestParser.hs
-    other-modules: Typechecker, Parser, ScopeStack Stack, Token, Types
+    other-modules: Typechecker, Parser, ScopeStack Stack, Token, Types, Utils
     hs-source-dirs:
         tests,
         src

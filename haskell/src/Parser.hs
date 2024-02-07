@@ -17,6 +17,7 @@ import ScopeStack
 import Token
 import Types
 
+data SubType = TupleSubType { typeConst :: Token, tupleFields :: [Token] } | EnumType Token deriving (Show, Eq)
 data StructField = ExprField Expr | KeyField { fieldKey :: Token, fieldExpr :: Expr } deriving (Show, Eq)
 data ParserError = ParserError {pos :: (Int, Int), msg :: String}
 data ParserState = ParserState {curPos :: (Int, Int), input :: String, scopeStack :: S.Stack SymbolTable} deriving (Show, Eq)
@@ -55,7 +56,7 @@ data Expr = Add Token Expr Expr
 
 data Statement = Assignment {var :: Expr, assigned :: Expr}
     | Def { defId :: Token, defType :: PrimeType}
-    | DataTypeDecl Token [Token]
+    | DataTypeDecl { typeName :: Token, generics :: [Token], subTypes :: [SubType] }
     | StructDecl Token 
     | ExprStmt Expr deriving (Show, Eq)
 
@@ -410,13 +411,19 @@ parseFieldAssignment = do
 parseTypeAssignment :: Parser Statement 
 parseTypeAssignment = do
     parseRawToken Keyword "type" <* many parseRowSpace
-    id <- parseIdentifierToken
-    firstGen <- parseChar '<' *> many parseRowSpace *> parseIdentifierToken
-    restGens <- parseGens <* many parseRowSpace
+    id <- parseIdentifierToken <* many parseRowSpace
+    mgens <- optional $ (do 
+        firstGen <- parseChar '<' *> many parseRowSpace *> parseIdentifierToken
+        restGens <- parseGens <* many parseRowSpace
+        parseChar '>' <* many parseRowSpace
+        return $ firstGen : restGens
+        )
     parseChar '=' <* many parseRowSpace
     firstSubType <- parseSubType <* many parseWhiteSpace
     restSubTypes <- parseSubTypeChain
-    return $ StructDecl id
+    case mgens of
+        Just gens -> return $ DataTypeDecl id gens  $ firstSubType : restSubTypes
+        Nothing -> return $ DataTypeDecl id [] $ firstSubType : restSubTypes
     where
 
         parseTuple = do
@@ -427,7 +434,7 @@ parseTypeAssignment = do
                 parseChar ',' <* many parseWhiteSpace
                 parseIdentifierToken
                 )
-            return $ DataTypeDecl id $ fstField : rest
+            return $ TupleSubType id $ fstField : rest
 
         parseGens = many (do
             parseChar ',' <* many parseRowSpace
@@ -439,7 +446,7 @@ parseTypeAssignment = do
                 Just r -> return r
                 Nothing -> do
                     id <- parseIdentifierToken
-                    return $ EnumType $ tokValue id
+                    return $ EnumType id
 
         parseSubTypeChain = many (do
             parseChar '|' <* many parseWhiteSpace
@@ -453,7 +460,7 @@ parseAssignment :: Parser Statement
 parseAssignment = parseIdentAssignment <|> parseIndexAssignment <|> parseFieldAssignment
 
 parseDecl :: Parser Statement
-parseDecl = Decl <$> parseStruct
+parseDecl = parseStruct <|> parseTypeAssignment
 
 parseStatement :: Parser Statement
 parseStatement = (many parseWhiteSpace) 
@@ -523,7 +530,7 @@ parseDefWithId = do
     def <- parseDef
     return $ (tok, def)
 
-parseStruct :: Parser Token
+parseStruct :: Parser Statement 
 parseStruct = do
     stack <- gets $ scopeStack
     parseRawToken Keyword "struct" <* many parseWhiteSpace
@@ -535,7 +542,7 @@ parseStruct = do
     parseChar '}'
     let sym = StructSym tok ( M.fromList $ map (\t -> (tokValue $ fst t, snd t)) orderedFields) $ Just $ CustomType (tokValue tok)
     modify $ \s -> s { scopeStack = insertTop (tokValue tok) sym $ scopeStack s}
-    return tok 
+    return $ StructDecl tok 
 
 parseInitStruct :: Parser Expr
 parseInitStruct = do

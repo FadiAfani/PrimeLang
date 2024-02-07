@@ -1,3 +1,5 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Stack where
 
 newtype Stack a = Stack [a] deriving (Show, Eq)
@@ -34,3 +36,10 @@ stackSize s = go s 0
         go stack count = case pop stack of
             (Nothing, _) -> count
             (_, stack') -> go stack' (count + 1)
+
+toList :: Stack a -> [a]
+toList (Stack as) = as
+
+instance Foldable Stack where
+    foldMap :: Monoid m => (a -> m) -> Stack a -> m
+    foldMap f (Stack as) = foldMap f as

@@ -5,7 +5,7 @@ module Typechecker where
 import Parser
 import Control.Monad.State.Lazy
 import qualified Data.Map as M
-import Data.Maybe (fromJust, isNothing, isJust)
+import Data.Maybe (fromJust, isNothing, isJust, catMaybes)
 import Control.Applicative
 import GHC.List (unsnoc)
 import Data.List (find)
@@ -344,8 +344,6 @@ updateExpr = \case
                 KeyField tok expr -> KeyField tok <$> updateExpr expr
 
 
-
-
     e -> return e
 updateStatement :: Statement -> StateT ScopeStack (Either CompilationError) Statement
 updateStatement (Assignment var expr) = case var of
@@ -354,13 +352,36 @@ updateStatement (Assignment var expr) = case var of
         t <- getExprType expr'
         modify $ \s -> adjustStackTable (tokValue tok) (\a -> a {symType = t}) s 
         return $ Assignment var expr'
+
     e -> do
         left <- updateExpr e
         right <- updateExpr expr
         return $ Assignment left right
 
 updateStatement (ExprStmt expr) = ExprStmt <$> updateExpr expr
-updateStatement (Decl _) = return $ Decl ()
+updateStatement (StructDecl tok) = return $ StructDecl tok 
+
+-- this operation is expensive but i don't care 
+-- (could've had the types registered as tokens in the symbol table for O(log(n)) lookup)
+updateStatement decl@(DataTypeDecl name gens subs) = do
+    let typeId = tokValue name 
+    pSubs <- traverse subToPrime subs
+    modify $ insertTop (tokValue name) $ TupleTypeSym name gens $ Just $ CustomType typeId
+    return decl 
+    where
+        subToPrime = \case
+           TupleSubType con fs ->  do
+               let typeId = tokValue name
+               s <- get
+               let fs' = zip fs $ map ( isTypeRegistered s . tokValue) fs
+               let badType = find ( ( == False) . snd) fs'
+               pTypes <- case badType of
+                   Just (t, _) -> reportError $ CompilationError (tokPos t) $ "Unknown Type: " ++ tokValue t ++ " is not a known type"
+                   goodType -> return $ map (getRegisteredType s . tokValue . fst) fs'
+               modify $ insertTop (tokValue con) ( EnumSym con (catMaybes pTypes) $ Just $ CustomType typeId )
+           EnumType tok -> do 
+               let typeId = tokValue name
+               modify $ insertTop (tokValue tok) (EnumSym tok [] $ Just $ CustomType typeId)
 
 updateAST :: [Statement] -> StateT ScopeStack (Either CompilationError) [Statement]
 updateAST = traverse updateStatement
