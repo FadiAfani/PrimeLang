@@ -353,6 +353,19 @@ updateStatement (Assignment var expr) = case var of
         modify $ \s -> adjustStackTable (tokValue tok) (\a -> a {symType = t}) s 
         return $ Assignment var expr'
 
+    List mtype vars -> case expr of
+        List mt exprItems -> do
+            
+            go vars exprItems
+        nonListExpr -> reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
+        where
+            go (x:_) [] = reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
+            go [] (y:_) = reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
+            go (x:xs) (y:ys) = do
+                xt <- getExprType x
+                yt <- getExprType y
+
+
     e -> do
         left <- updateExpr e
         right <- updateExpr expr

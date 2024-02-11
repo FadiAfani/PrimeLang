@@ -17,7 +17,6 @@ import ScopeStack
 import Token
 import Types
 
-data SubType = TupleSubType { typeConst :: Token, tupleFields :: [Token] } | EnumType Token deriving (Show, Eq)
 data StructField = ExprField Expr | KeyField { fieldKey :: Token, fieldExpr :: Expr } deriving (Show, Eq)
 data ParserError = ParserError {pos :: (Int, Int), msg :: String}
 data ParserState = ParserState {curPos :: (Int, Int), input :: String, scopeStack :: S.Stack SymbolTable} deriving (Show, Eq)
@@ -52,13 +51,16 @@ data Expr = Add Token Expr Expr
     | ListIndex { listId :: Token, index :: Expr }
     | Struct { structTok :: Token, structArgs :: [StructField] } 
     | StructField { structHead :: Token, fieldList :: [Token]}
+    | TupleSubType { typeConst :: Token, tupleFields :: [Token] } | EnumType Token 
     | For {token :: Token, cond :: Expr, closure :: Expr} deriving (Show, Eq)
 
 data Statement = Assignment {var :: Expr, assigned :: Expr}
     | Def { defId :: Token, defType :: PrimeType}
-    | DataTypeDecl { typeName :: Token, generics :: [Token], subTypes :: [SubType] }
+    | DataTypeDecl { typeName :: Token, generics :: [Token], subTypes :: [Expr] }
     | StructDecl Token 
     | ExprStmt Expr deriving (Show, Eq)
+
+
 
 type Parser a = StateT ParserState (Either ParserError) a
 
@@ -408,6 +410,28 @@ parseFieldAssignment = do
     expr <- parseExpr
     return $ Assignment f expr 
 
+
+
+parseSubType = do
+    isTuple <- optional parseTuple 
+    case isTuple of
+        Just r -> return r
+        Nothing -> do
+            id <- parseIdentifierToken
+            return $ EnumType id
+    where
+
+        parseTuple = do
+            id <- parseIdentifierToken <* many parseWhiteSpace
+            parseChar '(' <* many parseWhiteSpace
+            fstField <- parseIdentifierToken <* many parseWhiteSpace
+            rest <- many (do 
+                parseChar ',' <* many parseWhiteSpace
+                parseIdentifierToken
+                )
+            return $ TupleSubType id $ fstField : rest
+
+
 parseTypeAssignment :: Parser Statement 
 parseTypeAssignment = do
     parseRawToken Keyword "type" <* many parseRowSpace
@@ -426,38 +450,37 @@ parseTypeAssignment = do
         Nothing -> return $ DataTypeDecl id [] $ firstSubType : restSubTypes
     where
 
-        parseTuple = do
-            id <- parseIdentifierToken <* many parseWhiteSpace
-            parseChar '(' <* many parseWhiteSpace
-            fstField <- parseIdentifierToken <* many parseWhiteSpace
-            rest <- many (do 
-                parseChar ',' <* many parseWhiteSpace
-                parseIdentifierToken
-                )
-            return $ TupleSubType id $ fstField : rest
-
         parseGens = many (do
             parseChar ',' <* many parseRowSpace
             parseIdentifierToken )
-
-        parseSubType = do
-            isTuple <- optional parseTuple 
-            case isTuple of
-                Just r -> return r
-                Nothing -> do
-                    id <- parseIdentifierToken
-                    return $ EnumType id
+     
 
         parseSubTypeChain = many (do
             parseChar '|' <* many parseWhiteSpace
             parseSubType)
+-- note: some of these rules where not formally defined but it should be easy to tell what they are
+-- <pattern> := <subTypePattern> | <arrayPattern> | <tuplePattern> | <identifierPattern>
+-- <subTypePattern> := <enum> '(' <type> [ ',' <type> ]* ')' | <enum>
+-- <arrayPattern> := '[' <pattern>* ']'
+-- <tuplePattern> := '(' <pattern>  [ ',' <pattern> ]* ')'
+-- <identifierPattern> := <identifier>
 
-     
-    
+parsePattern :: Parser Expr
+parsePattern = parseStructFieldAccess <|> parseList <|> parseSubType 
 
+parsePatternAssignment :: Parser Statement
+parsePatternAssignment = do
+    pattern <- parsePattern <* many parseRowSpace
+    parseChar '=' <* many parseRowSpace
+    expr <- parseExpr
+    return $ Assignment pattern expr
 
 parseAssignment :: Parser Statement
-parseAssignment = parseIdentAssignment <|> parseIndexAssignment <|> parseFieldAssignment
+parseAssignment = parseTypeAssignment 
+    <|> parseIdentAssignment 
+    <|> parseIndexAssignment 
+    <|> parseFieldAssignment
+    <|> parsePatternAssignment
 
 parseDecl :: Parser Statement
 parseDecl = parseStruct <|> parseTypeAssignment
@@ -466,7 +489,7 @@ parseStatement :: Parser Statement
 parseStatement = (many parseWhiteSpace) 
     *> ( parseAssignment
     <|> parseExprStatement
-    <|> parseDecl
+    <|> parseStruct
     )
     <* (many parseWhiteSpace)
 
@@ -577,8 +600,7 @@ parseStructFieldAccess = do
     head <- parseIdentifierToken
     fieldChain <- some $ parseChar '.' *> parseIdentifierToken
     return $ StructField head fieldChain
--- f: x: number -> y: number -> z: number {
--- }
+
 
 parseProgram :: Parser Expr
 parseProgram = do 
