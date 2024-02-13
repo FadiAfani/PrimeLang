@@ -331,9 +331,14 @@ updateExpr = \case
             Nothing -> modify $ \s -> adjustStackTable (tokValue tok) (\a -> a {isOuterValue = True}) s
         return $ FuncCall tok args'
 
-    List listType exprs -> do 
-        exprs' <- traverse updateExpr exprs
-        return $ List listType exprs'
+    expr@(List listType exprs) -> case listType of
+        Nothing -> do
+            t <- getExprType expr
+            exprs' <- traverse updateExpr exprs
+            return $ List t exprs'
+        e -> do
+            exprs' <- traverse updateExpr exprs
+            return $ List listType exprs'
 
     Struct tok args -> do
         args' <- traverse updateArg args
@@ -353,18 +358,26 @@ updateStatement (Assignment var expr) = case var of
         modify $ \s -> adjustStackTable (tokValue tok) (\a -> a {symType = t}) s 
         return $ Assignment var expr'
 
-    List mtype vars -> case expr of
-        List mt exprItems -> do
-            
-            go vars exprItems
-        nonListExpr -> reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
-        where
-            go (x:_) [] = reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
-            go [] (y:_) = reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
-            go (x:xs) (y:ys) = do
-                xt <- getExprType x
-                yt <- getExprType y
-
+    lp@(List mtype vars) -> do 
+        expr' <- updateExpr expr
+        case expr' of
+            lc@(List mt exprItems) -> do
+                -- list should now be of a single uniform type (after updateExpr)
+                go vars exprItems
+                return $ Assignment lp lc
+            nonListExpr -> reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
+            where
+                go :: [Expr] -> [Expr] -> StateT ScopeStack (Either CompilationError) [Statement]
+                go [] [] = return []
+                go (x:_) [] = reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
+                go [] (y:_) = reportError $ CompilationError (1,1) "Pattern Mismatch: pattern does not match the expression"
+                go (x:xs) (y:ys) = case x of
+                    Literal x' -> do 
+                        ymt <- getExprType y
+                        len <- gets $ M.size . fromJust . S.peekTop
+                        modify $ insertTop (tokValue x') (Symbol [] ymt len False)
+                        go xs ys
+                    nonLit -> reportError $ CompilationError (1,1) "Type Error: deconstructors may only hold identifier literals"
 
     e -> do
         left <- updateExpr e

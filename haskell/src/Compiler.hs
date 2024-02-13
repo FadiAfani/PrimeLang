@@ -389,6 +389,17 @@ compileStatement (Assignment var expr) = case var of
                     [] -> [opSetField, fromIntegral $ snd field]
                     _ -> [opAccessField, fromIntegral $ snd field] ++ go fieldTok fs stack
 
+    List t items -> case expr of
+        List t' items' -> go items items'
+        nonList -> return [] -- this should never happen given the correctness of the typechecker
+        where
+            go [] _ = return []
+            go _ [] = return []
+            go (x:xs) (y:ys) = do 
+                ws <- compileStatement $ Assignment x y
+                rest <- go xs ys
+                return $ ws ++ rest
+
 
 
 
