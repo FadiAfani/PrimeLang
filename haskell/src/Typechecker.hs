@@ -171,7 +171,7 @@ getExprType (FuncCall tok args) = do
     case lookupStackTable (tokValue tok) stack of
         Just a -> do
             case symType a of
-                Just (CurryType []) -> return Nothing
+                Just (CurryType []) -> return Nothing -- eventually this will be changed to a unit type 
                 Just (CurryType xs) -> return $ Just $ last xs -- return type
                 Just t -> return $ Just t
                 _ -> return Nothing

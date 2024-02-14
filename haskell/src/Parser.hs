@@ -51,6 +51,7 @@ data Expr = Add Token Expr Expr
     | ListIndex { listId :: Token, index :: Expr }
     | Struct { structTok :: Token, structArgs :: [StructField] } 
     | StructField { structHead :: Token, fieldList :: [Token]}
+    | Tuple [Expr]
     | TupleSubType { typeConst :: Token, tupleFields :: [Token] } | EnumType Token 
     | For {token :: Token, cond :: Expr, closure :: Expr} deriving (Show, Eq)
 
@@ -334,7 +335,7 @@ parseIn = do
     return $ In op id rng 
 
 parseExpr :: Parser Expr
-parseExpr = parseClosure <|> parseIf <|> parseIn <|> parseRange <|> parseComp 
+parseExpr = parseClosure <|> parseIf <|> parseIn <|> parseRange <|> parseComp <|> parseTuple
 
 
 parseGroupedExpr :: Parser Expr
@@ -411,6 +412,15 @@ parseFieldAssignment = do
     return $ Assignment f expr 
 
 
+parseTuple = do
+    id <- parseIdentifierToken <* many parseWhiteSpace
+    parseChar '(' <* many parseWhiteSpace
+    fstField <- parseIdentifierToken <* many parseWhiteSpace
+    rest <- many (do 
+        parseChar ',' <* many parseWhiteSpace
+        parseIdentifierToken
+        )
+    return $ TupleSubType id $ fstField : rest
 
 parseSubType = do
     isTuple <- optional parseTuple 
@@ -419,18 +429,6 @@ parseSubType = do
         Nothing -> do
             id <- parseIdentifierToken
             return $ EnumType id
-    where
-
-        parseTuple = do
-            id <- parseIdentifierToken <* many parseWhiteSpace
-            parseChar '(' <* many parseWhiteSpace
-            fstField <- parseIdentifierToken <* many parseWhiteSpace
-            rest <- many (do 
-                parseChar ',' <* many parseWhiteSpace
-                parseIdentifierToken
-                )
-            return $ TupleSubType id $ fstField : rest
-
 
 parseTypeAssignment :: Parser Statement 
 parseTypeAssignment = do
