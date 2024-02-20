@@ -1,2 +1,11 @@
-[x, y] = [1, 2]
-print(x * 3 + y);
+struct st {
+    a: number;
+    b: number;
+}
+
+f x = {
+    x.a;
+}
+
+var = st {10, 12}
+

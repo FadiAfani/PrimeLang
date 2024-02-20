@@ -412,7 +412,17 @@ parseFieldAssignment = do
     return $ Assignment f expr 
 
 
+parseTuple :: Parser Expr
 parseTuple = do
+    parseChar '(' <* many parseWhiteSpace
+    e <- parseExpr
+    es <- many (do
+        parseChar ',' <* many parseWhiteSpace
+        parseExpr)
+    return $ Tuple (e : es)
+    
+
+parseTupleSubType = do
     id <- parseIdentifierToken <* many parseWhiteSpace
     parseChar '(' <* many parseWhiteSpace
     fstField <- parseIdentifierToken <* many parseWhiteSpace
@@ -423,7 +433,7 @@ parseTuple = do
     return $ TupleSubType id $ fstField : rest
 
 parseSubType = do
-    isTuple <- optional parseTuple 
+    isTuple <- optional parseTupleSubType
     case isTuple of
         Just r -> return r
         Nothing -> do

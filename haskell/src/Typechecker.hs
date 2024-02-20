@@ -221,7 +221,6 @@ getExprType (StructField head fieldChain) = do
     where
         go cur (f:fs) = do
             stack <- get
-            getExprType $ Literal cur
             let varSym = fromJust $ lookupStackTable (tokValue cur) stack
             let (CustomType structName) = fromJust $ symType varSym
             let structSym = fromJust $ lookupStackTable structName stack
@@ -327,8 +326,13 @@ updateExpr = \case
         modify $ adjustStackTable (tokValue tok) (\a -> a { symType = Just $ CurryType argTypes' })
         s <- get
         case lookupTop (tokValue tok) s of 
-            Just _ -> return ()
-            Nothing -> modify $ \s -> adjustStackTable (tokValue tok) (\a -> a {isOuterValue = True}) s
+            Just a -> if isJust (symType a) then
+                return $ FuncCall tok args'
+                else
+                    return $ FuncCall tok args
+            Nothing -> do 
+                modify $ \s -> adjustStackTable (tokValue tok) (\a -> a {isOuterValue = True}) s
+                return $ FuncCall tok args'
         return $ FuncCall tok args'
 
     expr@(List listType exprs) -> case listType of

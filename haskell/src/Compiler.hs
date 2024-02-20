@@ -405,6 +405,6 @@ compileStatement (Assignment var expr) = case var of
 
 
 compileStatement (ExprStmt expr) = compileExpr expr 
-compileStatement (DataTypeDecl {}) = return []
+compileStatement _ = return []
 
 

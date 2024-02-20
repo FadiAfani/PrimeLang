@@ -17,7 +17,7 @@
     CHECK_FAILED_ALLOCATION(ptr); \
 })
 
-#define BUFF_DYN_ARR(ptr, prev_size, type) ({\
+#define REALLOCATE(ptr, prev_size, type) ({\
 	type* new_ptr = realloc(ptr, 2  * sizeof(type) * prev_size); \
     if (!new_ptr) { \
 		    printf("Realloc failed\n"); \
