@@ -2,10 +2,10 @@
 
 #include <stdlib.h>
 
-void free_chunk(Chunk* chunk) {
-	free(chunk->bytecode);
-	chunk->size = 0;
-	chunk->capacity = 0;
+
+inline void free_vector(Vector* vec) {
+    free(vec->arr);
+    free(vector);
 }
 
 void free_pool(ConstPool* pool) {

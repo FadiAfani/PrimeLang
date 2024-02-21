@@ -29,4 +29,9 @@
 
 #define INIT_DYN_ARR(ptr, type, capacity) (BUFF_DYN_ARR(ptr, capacity/2, type))
 
+#define FREE_VECTOR(vec) ({ \
+    free(vec->arr); \
+    free(vec); \
+})
+
 #endif 

@@ -1,3 +1,5 @@
+#include "vector.h"
+
 typedef struct Position {
     int row;
     int col;
@@ -5,8 +7,8 @@ typedef struct Position {
 
 typedef enum TokenType {
     IDENTIFIER,
-    LSQR_BRAC,
-    RSQR_BRAC,
+    LBRAC,
+    RBRAC,
     LPAREN,
     RPAREN,
     SEMICOLON,
@@ -40,14 +42,25 @@ typedef enum TokenType {
     TYPE_STRING,
     TYPE_BYTE,
     TYPE_CHAR,
-    TYPE_BOOL
+    TYPE_BOOL,
+    FALSE,
+    TRUE,
+    IF,
+    ELIF,
+    ELSE,
+    FOR,
+    WHILE,
+    UNDERSCORE,
+    UNIT,
+    DOT,
 
 }TokenType;
 
 typedef struct Token {
     Position pos;
     TokenType type;
-    char* value;
+    Vector* value;
+    int index; // position in the src array
 }Token;
 
 Token* init_token();
