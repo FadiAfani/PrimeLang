@@ -9,8 +9,7 @@
 
 #define INIT_TOKEN_SIZE 2048
 #define INIT_ID_TOKEN_SIZE 16
-#define READ_CHAR(lexer) (lexer->src[lexer->cursor++])
-#define PEEK_CHAR(lexer) (lexer->src[lexer->cursor])
+#define READ_CHAR(lexer) (lexer->src[lexer->cursor])
 #define PEEK_NEXT(lexer) (lexer->src[lexer->cursor + 1])
 
 
@@ -34,7 +33,7 @@ void load_file_into_memory(Lexer* lexer, char* filename) {
 Lexer* init_lexer() {
     Lexer* lexer; 
     ALLOCATE(lexer, Lexer, 1);
-    ALLOCATE(lexer->tokens, Vector, 1);
+    INIT_VECTOR(lexer->tokens, Token);
 
     lexer->pos.row = 1;
     lexer->pos.col = 1;
@@ -69,6 +68,7 @@ static inline bool read_whitespace(Lexer* lexer) {
             break;
         default: return false;
     }
+    lexer->cursor++;
     return true;
 }
 
@@ -78,16 +78,18 @@ static inline void skip_whitespace(Lexer* lexer) {
 }
 
 static Token tokenize_id(Lexer* lexer) {
-    Vector* id = init_vector();
+    Vector* id;
+    INIT_VECTOR(id, char);
+    ((char*) id->arr)[id->capacity - 1] = '\0';
     Token tok;
     char c;
-    while ((c = READ_CHAR(lexer)) && isalpha(c)) {
+    while ((c = READ_CHAR(lexer)) != '\0' && isalpha(c)) {
+        lexer->cursor++;
         APPEND(id, c, char);
     }
 
     // TODO: change this to a hash table
-    char* value = (char*) id->arr;
-    printf("%s\n", value);
+    const char* value = (const char*) id->arr;
     if (strcmp(value, "false") == 0) {
         tok.type = TYPE_BOOL;
     } else if (strcmp(value, "true") == 0) {
@@ -112,9 +114,11 @@ static Token tokenize_id(Lexer* lexer) {
 }
 
 static Token tokenize_int(Lexer* lexer) {
-    Vector* num = init_vector();
+    Vector* num;
+    INIT_VECTOR(num, char);
     char c;
-    while((c = READ_CHAR(lexer)) && isdigit(c)) {
+    while((c = READ_CHAR(lexer)) != '\0' && isdigit(c)) {
+        lexer->cursor++;
         APPEND(num, c, char);
     }
     Token tok;
@@ -128,97 +132,113 @@ static Token tokenize_int(Lexer* lexer) {
 
 void tokenize(Lexer* lexer) {
     char c;
-    while((c = READ_CHAR(lexer))) {
+    while((c = READ_CHAR(lexer)) != '\0') {
         Token tok;
         tok.index = lexer->cursor;
         tok.pos = lexer->pos;
         switch(c) {
             case '+':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == '=') {
-                    READ_CHAR(lexer);
                     tok.type = PLUS_EQ;
+                    lexer->cursor++;
                 } else {
                     tok.type = PLUS;
                 } 
                 tok.value = NULL;
                 break;
             case '-':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == '=') {
                     READ_CHAR(lexer);
                     tok.type = MINUS_EQ;
+                    lexer->cursor++;
                 } else {
                     tok.type = MINUS;
                 } 
                 tok.value = NULL;
                 break;
             case '*':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == '=') {
-                    READ_CHAR(lexer);
                     tok.type = MULT_EQ;
+                    lexer->cursor++;
                 } else {
                     tok.type = MULT;
                 } 
                 tok.value = NULL;
                 break;
             case '/':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == '=') {
-                    READ_CHAR(lexer);
                     tok.type = DIV_EQ;
+                    lexer->cursor++;
                 } else {
                     tok.type = DIV;
                 } 
                 tok.value = NULL;
                 break;
             case ';':
+                lexer->cursor++;
                 tok.type = SEMICOLON;
                 tok.value = NULL;
                 break;
             case ':':
+                lexer->cursor++;
                 tok.type = COLON;
                 tok.value = NULL;
                 break;
             case ',':
+                lexer->cursor++;
                 tok.type = COMMA;
                 tok.value = NULL;
                 break;
             case '(':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == ')') {
-                    READ_CHAR(lexer);
                     tok.type = UNIT;
+                    lexer->cursor++;
                 } else {
                     tok.type = LPAREN;
                 }
                 tok.value = NULL;
                 break;
             case ')':
+                lexer->cursor++;
                 tok.type = RPAREN;
                 tok.value = NULL;
                 break;
             case '{':
+                lexer->cursor++;
                 tok.type = LCURLY;
                 tok.value = NULL;
                 break;
             case '}':
+                lexer->cursor++;
                 tok.type = RCURLY;
                 tok.value = NULL;
                 break;
             case '[':
+                lexer->cursor++;
                 tok.type = LBRAC;
                 tok.value = NULL;
                 break;
             case ']':
+                lexer->cursor++;
                 tok.type = RBRAC;
                 tok.value = NULL;
                 break;
             case '.':
+                lexer->cursor++;
                 tok.type = DOT;
                 tok.value = NULL;
                 break;
 
             case '!':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == '=') {
-                    READ_CHAR(lexer);
                     tok.type = NEQ;
+                    lexer->cursor++;
                 } else {
                     tok.type = NOT;
                 }
@@ -226,19 +246,22 @@ void tokenize(Lexer* lexer) {
                 break;
 
             case '%':
+                lexer->cursor++;
                 tok.type = MOD;
                 tok.value = NULL;
                 break;
 
             case '_':
+                lexer->cursor++;
                 tok.type = UNDERSCORE;
                 tok.value = NULL;
                 break;
 
             case '=':
+                lexer->cursor++;
                 if (PEEK_NEXT(lexer) == '=') {
-                    READ_CHAR(lexer);
                     tok.type = DEQ;
+                    lexer->cursor++;
                 } else {
                     tok.type = EQ;
                 }
@@ -250,8 +273,8 @@ void tokenize(Lexer* lexer) {
             default:
                 if (isdigit(c)) {
                     tok = tokenize_int(lexer);
-                    if (PEEK_CHAR(lexer) != '.') break;
-                    READ_CHAR(lexer);
+                    if (READ_CHAR(lexer) != '.') break;
+                    lexer->cursor++;
                     Token frac = tokenize_int(lexer);
                     strcat(tok.value->arr, ".");
                     strcat(tok.value->arr, frac.value->arr);
