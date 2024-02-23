@@ -53,6 +53,7 @@ typedef enum TokenType {
     UNDERSCORE,
     UNIT,
     DOT,
+    EOF_TOK,
 
 }TokenType;
 
@@ -64,4 +65,6 @@ typedef struct Token {
 }Token;
 
 Token* init_token();
+void print_position(Position pos);
+void print_token(Token token);
 
