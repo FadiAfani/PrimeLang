@@ -32,23 +32,26 @@ void load_file_into_memory(Lexer* lexer, char* filename) {
 Lexer* init_lexer() {
     Lexer* lexer; 
     ALLOCATE(lexer, Lexer, 1);
-    INIT_VECTOR(lexer->tokens, Token);
 
     lexer->pos.row = 1;
     lexer->pos.col = 1;
     lexer->filename = NULL;
     lexer->src = NULL;
     lexer->cursor = 0;
+    lexer->tokens = (Vector) {INIT_VECTOR_CAP, 0, NULL};
+    ALLOCATE(lexer->tokens.arr, Token, INIT_VECTOR_CAP);
+    
+    return lexer;
     
 }
 
 void print_lexer(Lexer lexer) {
     print_position(lexer.pos);
     printf("cursor: %d\n", lexer.cursor);
-    printf("num_tokens: %d\n", lexer.tokens->size);
-    for (int i = 0; i < lexer.tokens->size; i++) {
+    printf("num_tokens: %d\n", lexer.tokens.size);
+    for (int i = 0; i < lexer.tokens.size; i++) {
         printf("------------------\n");
-        print_token(( (Token*) lexer.tokens->arr)[i]);
+        print_token(( (Token*) lexer.tokens.arr)[i]);
         printf("------------------\n");
     }
 }
@@ -88,58 +91,61 @@ static inline void skip_whitespace(Lexer* lexer) {
     while(read_whitespace(lexer));
 }
 
-static Token tokenize_id(Lexer* lexer) {
-    Vector* id;
-    INIT_VECTOR(id, char);
-    Token tok;
+static void tokenize_id(Lexer* lexer, Token* tok) {
+
+    ALLOCATE(tok->value.arr, char, INIT_VECTOR_CAP);
     char c;
     while ((c = READ_CHAR(lexer)) != '\0' && isalpha(c)) {
         lexer->cursor++;
-        APPEND(id, c, char);
+        APPEND(tok->value, c, char);
     }
-    ((char*) id->arr)[id->size] = '\0';
+    APPEND(tok->value, '\0', char);
     // TODO: change this to a hash table
-    const char* value = (const char*) id->arr;
+    const char* value = (const char*) tok->value.arr;
     if (strcmp(value, "false") == 0) {
-        tok.type = TYPE_BOOL;
+        tok->type = TYPE_BOOL;
     } else if (strcmp(value, "true") == 0) {
-        tok.type = TYPE_BOOL;
+        tok->type = TYPE_BOOL;
     } else if (strcmp(value, "if") == 0) {
-        tok.type = IF;
+        tok->type = IF;
     } else if (strcmp(value, "else") == 0) {
-        tok.type = ELSE;
+        tok->type = ELSE;
     } else if (strcmp(value, "elif") == 0) {
-        tok.type = ELIF;
+        tok->type = ELIF;
     } else if (strcmp(value, "while") == 0) {
-        tok.type = WHILE;
+        tok->type = WHILE;
     } else if (strcmp(value, "for") == 0) {
-        tok.type = FOR;
+        tok->type = FOR;
     } else {
-        tok.type = IDENTIFIER;
+        tok->type = IDENTIFIER;
     } 
-    tok.pos = lexer->pos;
-    tok.value = id;
-    lexer->pos.col += id->size;
+    lexer->pos.col += tok->value.size;
 
-    return tok;
 }
 
-static Token tokenize_int(Lexer* lexer) {
-    Vector* num;
-    INIT_VECTOR(num, char);
+static void tokenize_int(Lexer* lexer, Token* tok) {
+    ALLOCATE(tok->value.arr, char, INIT_VECTOR_CAP);
     char c;
     while((c = READ_CHAR(lexer)) != '\0' && isdigit(c)) {
         lexer->cursor++;
-        APPEND(num, c, char);
+        APPEND(tok->value, c, char);
     }
-    ((char*) num->arr)[num->size] = '\0';
-    Token tok;
-    tok.pos = lexer->pos;
-    tok.type = TYPE_INT;
-    tok.value = num;
-    lexer->pos.col += num->size;
+    APPEND(tok->value, '\0', char);
+    tok->type = TYPE_INT;
+    lexer->pos.col += tok->value.size;
 
-    return tok;
+}
+
+static void tokenize_string(Lexer* lexer, Token* tok) {
+    ALLOCATE(tok->value.arr, char, INIT_VECTOR_CAP);
+    char c;
+    while ((c = READ_CHAR(lexer)) != '\0' && c != '"') {
+        lexer->cursor++;
+        APPEND(tok->value, c, char);
+    }
+    APPEND(tok->value, '\0', char);
+    tok->type = STRING;
+    lexer->pos.col += tok->value.size;
 }
 
 
@@ -149,6 +155,7 @@ void tokenize(Lexer* lexer) {
         Token tok;
         tok.index = lexer->cursor;
         tok.pos = lexer->pos;
+        tok.value = (Vector) {INIT_VECTOR_CAP, 0, NULL};
         switch(c) {
             case '+':
                 lexer->cursor++;
@@ -157,10 +164,11 @@ void tokenize(Lexer* lexer) {
                     tok.type = PLUS_EQ;
                     lexer->cursor++;
                     lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "+="};
                 } else {
                     tok.type = PLUS;
                 } 
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "+"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '-':
@@ -169,11 +177,12 @@ void tokenize(Lexer* lexer) {
                 if (READ_CHAR(lexer) == '=') {
                     tok.type = MINUS_EQ;
                     lexer->cursor++;
+                    tok.value = (Vector) {2, 2, "-="};
                     lexer->pos.col++;
                 } else {
                     tok.type = MINUS;
-                } 
-                tok.value = NULL;
+                }
+                tok.value = (Vector) {1, 1, "-"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '*':
@@ -183,10 +192,11 @@ void tokenize(Lexer* lexer) {
                     tok.type = MULT_EQ;
                     lexer->cursor++;
                     lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "*="};
                 } else {
                     tok.type = MULT;
                 } 
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "*"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '/':
@@ -196,31 +206,32 @@ void tokenize(Lexer* lexer) {
                     tok.type = DIV_EQ;
                     lexer->cursor++;
                     lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "/="};
                 } else {
                     tok.type = DIV;
                 } 
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "/"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ';':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = SEMICOLON;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, ";"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ':':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = COLON;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, ":"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ',':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = COMMA;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, ","};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '(':
@@ -230,52 +241,53 @@ void tokenize(Lexer* lexer) {
                     tok.type = UNIT;
                     lexer->cursor++;
                     lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "()"};
                 } else {
                     tok.type = LPAREN;
                 }
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "("};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ')':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = RPAREN;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, ")"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '{':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = LCURLY;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "{"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '}':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = RCURLY;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "}"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '[':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = LBRAC;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "["};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ']':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = RBRAC;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "}"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '.':
                 lexer->cursor++;
                 lexer->pos.col++; 
                 tok.type = DOT;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "."};
                 APPEND(lexer->tokens, tok, Token);
                 break;
 
@@ -286,10 +298,11 @@ void tokenize(Lexer* lexer) {
                     tok.type = NEQ;
                     lexer->cursor++;
                     lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "!="};
                 } else {
                     tok.type = NOT;
                 }
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "!"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
 
@@ -297,15 +310,15 @@ void tokenize(Lexer* lexer) {
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = MOD;
-                tok.value = NULL;
-                break;
+                tok.value = (Vector) {1, 1, "%"};
                 APPEND(lexer->tokens, tok, Token);
+                break;
 
             case '_':
                 lexer->cursor++;
                 lexer->pos.col++;
                 tok.type = UNDERSCORE;
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "_"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
 
@@ -316,24 +329,39 @@ void tokenize(Lexer* lexer) {
                     tok.type = DEQ;
                     lexer->cursor++;
                     lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "=="};
                 } else {
                     tok.type = EQ;
                 }
-                tok.value = NULL;
+                tok.value = (Vector) {1, 1, "="};
                 APPEND(lexer->tokens, tok, Token);
                 break;
 
+            case '"':
+                {
+                    lexer->cursor++;
+                    tok.type = STRING;
+                    tok.value = (Vector) {INIT_VECTOR_CAP, 0, NULL};
+                    tokenize_string(lexer, &tok);
+                    APPEND(lexer->tokens, tok, Token);
+                    break;
+                }
+
             default:
                 if (isdigit(c)) {
-                    tok = tokenize_int(lexer);
-                    if (READ_CHAR(lexer) != '.') break;
-                    lexer->cursor++;
-                    Token frac = tokenize_int(lexer);
-                    strcat(tok.value->arr, ".");
-                    strcat(tok.value->arr, frac.value->arr);
+                    tokenize_int(lexer, &tok);
+                    if (READ_CHAR(lexer) == '.') {
+                        lexer->cursor++;
+                        Token frac;
+                        frac.value = (Vector) {INIT_VECTOR_CAP, 0, NULL};
+                        tokenize_int(lexer, &frac);
+                        strcat(tok.value.arr, ".");
+                        strcat(tok.value.arr, frac.value.arr);
+
+                    }
                     APPEND(lexer->tokens, tok, Token);
                 } else if (isalpha(c)) {
-                    tok = tokenize_id(lexer);
+                    tokenize_id(lexer, &tok);
                     APPEND(lexer->tokens, tok, Token);
                 } else if (is_whitespace(c)) {
                     skip_whitespace(lexer); 

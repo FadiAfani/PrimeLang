@@ -5,7 +5,7 @@
 
 typedef struct Lexer {
     Position pos;
-    Vector* tokens;
+    Vector tokens;
     char* filename;
     int cursor;
     char* src;

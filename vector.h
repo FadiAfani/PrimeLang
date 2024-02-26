@@ -7,11 +7,11 @@
 #define INIT_VECTOR_CAP 16
 
 #define APPEND(vector, elem, type) ({ \
-    if (vector->size >= vector->capacity) { \
-        REALLOCATE(vector->arr, vector->capacity, type); \
-        vector->capacity *= 2; \
+    if (vector.size >= vector.capacity) { \
+        REALLOCATE(vector.arr, vector.capacity, type); \
+        vector.capacity *= 2; \
     } \
-    ((type*) vector->arr)[vector->size++] = elem; \
+    ((type*) vector.arr)[vector.size++] = elem; \
 })
 
 #define INIT_VECTOR(vector, type) ({ \

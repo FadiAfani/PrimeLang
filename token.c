@@ -61,7 +61,5 @@ void print_token(Token token) {
     print_position(token.pos);
     printf("type: ");
     print_token_type(token.type);
-    if (token.value) {
-        printf("value: %s\n", (char*) token.value->arr);
-    }
+    printf("value: %s\n", (char*) token.value.arr);
 }

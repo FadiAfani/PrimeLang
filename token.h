@@ -1,3 +1,6 @@
+#ifndef TOKEN_H
+#define TOKEN_H
+
 #include "vector.h"
 
 typedef struct Position {
@@ -37,6 +40,10 @@ typedef enum TokenType {
     MULT_EQ,
     DIV_EQ,
     HASHTAG,
+    INT_LIT,
+    STRING_LIT,
+    DOUBLE_LIT,
+    BOOL_LIT,
     TYPE_INT,
     TYPE_DOUBLE,
     TYPE_STRING,
@@ -53,18 +60,19 @@ typedef enum TokenType {
     UNDERSCORE,
     UNIT,
     DOT,
-    EOF_TOK,
+    QOUT,
 
 }TokenType;
 
 typedef struct Token {
     Position pos;
     TokenType type;
-    Vector* value;
-    int index; // position in the src array
+    Vector value;
+    size_t index; // position in the src array
 }Token;
 
 Token* init_token();
 void print_position(Position pos);
 void print_token(Token token);
 
+#endif
