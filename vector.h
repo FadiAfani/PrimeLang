@@ -6,6 +6,9 @@
 
 #define INIT_VECTOR_CAP 16
 
+#define CAST_VECTOR(vector, type) ((type*) vector.arr)
+#define INDEX_VECTOR(vector, type, i) (CAST_VECTOR(vector, type)[i])
+
 #define APPEND(vector, elem, type) ({ \
     if (vector.size >= vector.capacity) { \
         REALLOCATE(vector.arr, vector.capacity, type); \
@@ -15,10 +18,9 @@
 })
 
 #define INIT_VECTOR(vector, type) ({ \
-    ALLOCATE(vector, Vector, 1); \
-    ALLOCATE(vector->arr, type, INIT_VECTOR_CAP); \
     vector->capacity = INIT_VECTOR_CAP; \
     vector->size = 0; \
+    ALLOCATE(vector->arr, type, INIT_VECTOR_CAP); \
 })
 
 typedef struct Vector{
@@ -26,5 +28,7 @@ typedef struct Vector{
     int size;
     void* arr;
 }Vector;
+
+void init_vector(Vector* vector);
 
 #endif

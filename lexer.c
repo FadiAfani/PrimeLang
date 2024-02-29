@@ -29,10 +29,7 @@ void load_file_into_memory(Lexer* lexer, char* filename) {
 
 }
 
-Lexer* init_lexer() {
-    Lexer* lexer; 
-    ALLOCATE(lexer, Lexer, 1);
-
+void init_lexer(Lexer* lexer) {
     lexer->pos.row = 1;
     lexer->pos.col = 1;
     lexer->filename = NULL;
@@ -40,18 +37,15 @@ Lexer* init_lexer() {
     lexer->cursor = 0;
     lexer->tokens = (Vector) {INIT_VECTOR_CAP, 0, NULL};
     ALLOCATE(lexer->tokens.arr, Token, INIT_VECTOR_CAP);
-    
-    return lexer;
-    
 }
 
-void print_lexer(Lexer lexer) {
-    print_position(lexer.pos);
-    printf("cursor: %d\n", lexer.cursor);
-    printf("num_tokens: %d\n", lexer.tokens.size);
-    for (int i = 0; i < lexer.tokens.size; i++) {
+void print_lexer(Lexer* lexer) {
+    print_position(lexer->pos);
+    printf("cursor: %d\n", lexer->cursor);
+    printf("num_tokens: %d\n", lexer->tokens.size);
+    for (int i = 0; i < lexer->tokens.size; i++) {
         printf("------------------\n");
-        print_token(( (Token*) lexer.tokens.arr)[i]);
+        print_token(( (Token*) lexer->tokens.arr)[i]);
         printf("------------------\n");
     }
 }
@@ -103,9 +97,9 @@ static void tokenize_id(Lexer* lexer, Token* tok) {
     // TODO: change this to a hash table
     const char* value = (const char*) tok->value.arr;
     if (strcmp(value, "false") == 0) {
-        tok->type = TYPE_BOOL;
+        tok->type = BOOL_LIT;
     } else if (strcmp(value, "true") == 0) {
-        tok->type = TYPE_BOOL;
+        tok->type = BOOL_LIT;
     } else if (strcmp(value, "if") == 0) {
         tok->type = IF;
     } else if (strcmp(value, "else") == 0) {
@@ -131,7 +125,7 @@ static void tokenize_int(Lexer* lexer, Token* tok) {
         APPEND(tok->value, c, char);
     }
     APPEND(tok->value, '\0', char);
-    tok->type = TYPE_INT;
+    tok->type = INT_LIT;
     lexer->pos.col += tok->value.size;
 
 }
@@ -144,7 +138,7 @@ static void tokenize_string(Lexer* lexer, Token* tok) {
         APPEND(tok->value, c, char);
     }
     APPEND(tok->value, '\0', char);
-    tok->type = STRING;
+    tok->type = STRING_LIT;
     lexer->pos.col += tok->value.size;
 }
 
@@ -374,9 +368,11 @@ void tokenize(Lexer* lexer) {
     }
 }
 
-void main(int argc, char** argv) {
-    Lexer* lexer = init_lexer();
+/*void main(int argc, char** argv) {
+    Lexer* lexer;
+    init_lexer(lexer);
     load_file_into_memory(lexer, argv[1]);
     tokenize(lexer);
     print_lexer(*lexer);
 }
+*/

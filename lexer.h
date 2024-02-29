@@ -11,8 +11,9 @@ typedef struct Lexer {
     char* src;
 }Lexer;
 
-Lexer* init_lexer();
+void init_lexer(Lexer* lexer);
 void load_file_into_memory(Lexer* lexer, char* filename);
-void print_lexer(Lexer lexer);
+void print_lexer(Lexer* lexer);
+void tokenize(Lexer* lexer);
 #endif
 
