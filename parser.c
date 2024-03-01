@@ -33,6 +33,10 @@ void free_ast_node(ASTNode* node) {
                 free_ast_node(INDEX_VECTOR(node->as_list_expr.items, ASTNode*, i));
             }
             break;
+        case ASSIGNMENT_STMT:
+            free_ast_node(node->as_assignment_stmt.left);
+            free_ast_node(node->as_assignment_stmt.right);
+            break;
         default:
             printf("free is not implemented for this node type\n");
             exit(EXIT_FAILURE);
@@ -41,6 +45,8 @@ void free_ast_node(ASTNode* node) {
 }
 
 void print_node(ASTNode* node, int depth) {
+    if (node == NULL) return;
+
     for (int i = 0; i < depth; i++) {
         printf("\t");
     }
@@ -58,6 +64,17 @@ void print_node(ASTNode* node, int depth) {
             for (size_t i = 0; i < node->as_list_expr.items.size; i++) {
                 print_node(INDEX_VECTOR(node->as_list_expr.items, ASTNode*, i), depth + 1);
             }
+            break;
+        case TUPLE_EXPR:
+            printf("<tuple-expr>\n");
+            for (size_t i = 0; i < node->as_list_expr.items.size; i++) {
+                print_node(INDEX_VECTOR(node->as_list_expr.items, ASTNode*, i), depth + 1);
+            }
+            break;
+        case ASSIGNMENT_STMT:
+            printf("<assignment-statement>\n");
+            print_node(node->as_assignment_stmt.left, depth + 1);
+            print_node(node->as_assignment_stmt.right, depth + 1);
             break;
 
         default:
@@ -286,23 +303,51 @@ ASTNode* parse_list(Parser* parser) {
 
 }
 
-ASTNode* parse_group_expr(Parser* parser) {
+ASTNode* parse_tuple(Parser* parser) {
+
     consume(parser, LPAREN);
-    ASTNode* node = parse_expr(parser);
-    Token paren = READ_TOKEN(parser);
+    ASTNode* expr = parse_expr(parser);
+    if (READ_TOKEN(parser).type == RPAREN) {
+        consume(parser, RPAREN);
+        return expr;
+    }
+
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->as_list_expr.items = (Vector) {INIT_VECTOR_CAP, 0, NULL};
+    ALLOCATE(node->as_list_expr.items.arr, ASTNode*, INIT_VECTOR_CAP);
+    APPEND(node->as_list_expr.items, expr, ASTNode*);
+    node->type = TUPLE_EXPR;
+
+    while(true) {
+        if (consume(parser, COMMA)) {
+            APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
+        } else {
+            break;
+        }
+    }
+
+    Token brac = READ_TOKEN(parser);
     if (!consume(parser, RPAREN)) {
+        // report error and free node memory
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            paren.index, paren.value.size + paren.index,
-            paren.pos, "missing ')' symbol"}),
+            brac.index, brac.value.size + brac.index,
+            brac.pos, "missing ')' symbol"}),
             Error
             );
+
         free_ast_node(node);
+
+
         return NULL;
     }
+
     return node;
+
 }
+
 
 ASTNode* parse_func_call(Parser* parser) {
     ASTNode* id = parse_identifier_literal(parser);
@@ -360,9 +405,7 @@ ASTNode* parse_primary(Parser* parser) {
             }
             return parse_identifier_literal(parser);
         case INT_LIT: return parse_int_literal(parser);
-        case LPAREN:
-            return parse_group_expr(parser);
-
+        case LPAREN: return parse_tuple(parser);
         case LBRAC: return parse_list(parser);
 
         default:
@@ -377,6 +420,39 @@ ASTNode* parse_expr(Parser* parser) {
     return parse_or(parser);
 }
 
+ASTNode* parse_assginment(Parser* parser) {
+    ASTNode* left = parse_expr(parser);
+    Token eq = READ_TOKEN(parser);
+    if (!consume(parser, EQ)) {
+        return left;
+    }
+    ASTNode* right = parse_expr(parser);
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->as_assignment_stmt.left = left;
+    node->as_assignment_stmt.right = right;
+    node->type = ASSIGNMENT_STMT;
+
+    return node;
+}
+
+ASTNode* parse_statement(Parser* parser) {
+    ASTNode* node = parse_assginment(parser);
+    Token semi_colon = READ_TOKEN(parser);
+    if (!consume(parser, SEMICOLON)) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            semi_colon.index, semi_colon.value.size + semi_colon.index,
+            semi_colon.pos, "missing ';' symbol"}),
+            Error
+            );
+        free_ast_node(node);
+        return NULL;
+    }
+    return node;
+}
+
 
 int main(int argc, char** argv) {
     Parser* parser;
@@ -384,7 +460,7 @@ int main(int argc, char** argv) {
     init_parser(parser);
     load_file_into_memory(&(parser->lexer), "ctest.txt");
     tokenize(&(parser->lexer));
-    ASTNode* root = parse_expr(parser);
+    ASTNode* root = parse_statement(parser);
     print_node(root, 0);
 
     return 0;

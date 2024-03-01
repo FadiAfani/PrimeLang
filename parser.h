@@ -21,6 +21,7 @@ typedef enum NodeType {
     STRUCT_FIELD_EXPR,
     LAMBDA_EXPR,
     COMPOUND_STMT,
+    ASSIGNMENT_STMT,
     STURCT_DECL,
     FUNC_DECL
 
@@ -76,6 +77,11 @@ typedef struct FuncCallExpr {
 
 }FuncCallExpr;
 
+typedef struct AssignmentStmt {
+    ASTNode* left;
+    ASTNode* right;
+}AssignmentStmt;
+
 
 struct ASTNode {
     union {
@@ -83,6 +89,7 @@ struct ASTNode {
         UnExpr as_un_expr;
         ListExpr as_list_expr;
         FuncCallExpr as_func_call;
+        AssignmentStmt as_assignment_stmt;
         Token as_literal_expr;
     };
     NodeType type;
@@ -108,6 +115,8 @@ ASTNode* parse_expr(Parser* parser);
 ASTNode* parse_group_expr(Parser* parser);
 ASTNode* parse_func_call(Parser* parser);
 ASTNode* parse_primary(Parser* parser);
+ASTNode* parse_assignment(Parser* parser);
+ASTNode* parse_statement(Parser* parser);
 
 void print_node(ASTNode* node, int depth);
 void free_ast_node(ASTNode* node);
