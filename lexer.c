@@ -366,6 +366,8 @@ void tokenize(Lexer* lexer) {
                 break;
         }
     }
+    Token eof = {lexer->pos, TOK_EOF, {0}, lexer->cursor};
+    APPEND(lexer->tokens, eof, Token);
 }
 
 /*void main(int argc, char** argv) {

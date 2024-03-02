@@ -61,6 +61,7 @@ typedef enum TokenType {
     UNIT,
     DOT,
     QOUT,
+    TOK_EOF,
 
 }TokenType;
 

@@ -20,6 +20,7 @@ typedef enum NodeType {
     STRUCT_EXPR,
     STRUCT_FIELD_EXPR,
     LAMBDA_EXPR,
+    BLOCK_EXPR,
     COMPOUND_STMT,
     ASSIGNMENT_STMT,
     STURCT_DECL,
@@ -48,11 +49,15 @@ typedef struct ListExpr {
 }ListExpr;
 
 typedef struct ListIndexExpr {
-
+    ASTNode* index;
+    ASTNode* list_id;
 }ListIndexExpr;
 
 typedef struct IfExpr {
-
+    ASTNode* cond;
+    ASTNode* block;
+    Vector else_ifs;
+    ASTNode* else_block;
 }IfExpr;
 
 typedef struct ForExpr {
@@ -91,6 +96,11 @@ struct ASTNode {
         FuncCallExpr as_func_call;
         AssignmentStmt as_assignment_stmt;
         Token as_literal_expr;
+        Vector as_compound_statements;
+        IfExpr as_if_expr;
+        ForExpr as_for_expr;
+        WhileExpr as_while_expr;
+        ListIndexExpr as_list_index_expr;
     };
     NodeType type;
 };
@@ -117,6 +127,9 @@ ASTNode* parse_func_call(Parser* parser);
 ASTNode* parse_primary(Parser* parser);
 ASTNode* parse_assignment(Parser* parser);
 ASTNode* parse_statement(Parser* parser);
+ASTNode* parse_compound(Parser* parser);
+ASTNode* parse_list_index(Parser* parser);
+ASTNode* parse_block(Parser* parser);
 
 void print_node(ASTNode* node, int depth);
 void free_ast_node(ASTNode* node);

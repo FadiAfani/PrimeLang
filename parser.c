@@ -76,6 +76,32 @@ void print_node(ASTNode* node, int depth) {
             print_node(node->as_assignment_stmt.left, depth + 1);
             print_node(node->as_assignment_stmt.right, depth + 1);
             break;
+        case COMPOUND_STMT:
+            printf("<compound-statement>\n");
+            for (size_t i = 0; i < node->as_compound_statements.size; i++) {
+                print_node(INDEX_VECTOR(node->as_compound_statements, ASTNode*, i), depth + 1);
+            }
+            break;
+        case BLOCK_EXPR:
+            printf("<block-expr>\n");
+            for (size_t i = 0; i < node->as_compound_statements.size; i++) {
+                print_node(INDEX_VECTOR(node->as_compound_statements, ASTNode*, i), depth + 1);
+            }
+            break;
+        case LIST_INDEX_EXPR:
+            printf("<list-index>\n");
+            print_node(node->as_list_index_expr.index, depth + 1);
+            print_node(node->as_list_index_expr.list_id, depth + 1);
+            break;
+        case IF_EXPR:
+            printf("<if-expr>\n");
+            print_node(node->as_if_expr.cond, depth + 1);
+            print_node(node->as_if_expr.block, depth + 1);
+            print_node(node->as_if_expr.else_block, depth + 1);
+            for (size_t i = 0; i < node->as_if_expr.else_ifs.size; i++) {
+                print_node(INDEX_VECTOR(node->as_if_expr.else_ifs, ASTNode*, i), depth + 1);
+            }
+            break;
 
         default:
             printf("print method is not implemented for this node type\n");
@@ -397,23 +423,110 @@ ASTNode* parse_func_call(Parser* parser) {
 
 }
 
+ASTNode* parse_list_index(Parser* parser) {
+    ASTNode* id = parse_identifier_literal(parser);
+    Token tok = READ_TOKEN(parser);
+    if (!consume(parser, LBRAC)) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok.index, tok.value.size + tok.index,
+            tok.pos, "missing ')' symbol"}),
+            Error
+            );
+        free_ast_node(id);
+        return NULL;
+    }
+    ASTNode* expr = parse_expr(parser);
+
+    if (!consume(parser, RBRAC)) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok.index, tok.value.size + tok.index,
+            tok.pos, "missing ')' symbol"}),
+            Error
+            );
+        free_ast_node(id);
+        free_ast_node(expr);
+        return NULL;
+    }
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->type = LIST_INDEX_EXPR;
+    node->as_list_index_expr.index = expr;
+    node->as_list_index_expr.list_id = id;
+
+    return node;
+}
+
 ASTNode* parse_primary(Parser* parser) {
     switch(READ_TOKEN(parser).type) {
         case IDENTIFIER:
             if (PEEK_NEXT(parser).type == LPAREN) {
                 return parse_func_call(parser);
+            } else if (PEEK_NEXT(parser).type == LBRAC) {
+                return parse_list_index(parser);
             }
             return parse_identifier_literal(parser);
         case INT_LIT: return parse_int_literal(parser);
         case LPAREN: return parse_tuple(parser);
         case LBRAC: return parse_list(parser);
+        case LCURLY: return parse_block(parser);
 
         default:
-            printf("primary type not implemented\n");
+            printf("primary type not implemented: %d\n", READ_TOKEN(parser).type);
             exit(EXIT_FAILURE);
             
     }
+    return NULL;
 
+}
+
+ASTNode* parse_block(Parser* parser) {
+    consume(parser, LCURLY);
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    Vector* vec = &(node->as_compound_statements);
+    INIT_VECTOR(vec, ASTNode*);
+    node->type = BLOCK_EXPR;
+
+    while(!consume(parser, RCURLY)) {
+        APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
+    }
+
+    return node;
+
+}
+
+ASTNode* parse_elif(Parser* parser) {
+    consume(parser, ELIF);
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    Vector* vec = &(node->as_if_expr.else_ifs);
+    INIT_VECTOR(vec, ASTNode*);
+    node->as_if_expr.cond = parse_expr(parser);
+    node->as_if_expr.block = parse_block(parser);
+    return node;
+}
+
+ASTNode* parse_if(Parser* parser) {
+    consume(parser, IF);
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    Vector* vec = &(node->as_if_expr.else_ifs);
+    INIT_VECTOR(vec, ASTNode*);
+    node->as_if_expr.cond = parse_expr(parser);
+    node->as_if_expr.block = parse_block(parser);
+    node->as_if_expr.else_block = NULL;
+    while(READ_TOKEN(parser).type == ELIF) {
+        APPEND(node->as_if_expr.else_ifs, parse_elif(parser), ASTNode*);
+    }
+
+    if (consume(parser, ELSE)) {
+        node->as_if_expr.else_block = parse_block(parser);
+    } 
+    return node;
 }
 
 ASTNode* parse_expr(Parser* parser) {
@@ -453,6 +566,18 @@ ASTNode* parse_statement(Parser* parser) {
     return node;
 }
 
+ASTNode* parse_compound(Parser* parser) {
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    Vector* vec = &(node->as_compound_statements);
+    INIT_VECTOR(vec, ASTNode);
+    node->type = COMPOUND_STMT;
+    while(!consume(parser, TOK_EOF)) {
+        APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
+    }
+    return node;
+}
+
 
 int main(int argc, char** argv) {
     Parser* parser;
@@ -460,7 +585,7 @@ int main(int argc, char** argv) {
     init_parser(parser);
     load_file_into_memory(&(parser->lexer), "ctest.txt");
     tokenize(&(parser->lexer));
-    ASTNode* root = parse_statement(parser);
+    ASTNode* root = parse_compound(parser);
     print_node(root, 0);
 
     return 0;
