@@ -62,6 +62,11 @@ typedef enum TokenType {
     DOT,
     QOUT,
     TOK_EOF,
+    BREAK,
+    THEN,
+    RANGE,
+    PIPE, // '|'
+    KEYWORD_TYPE, // "type" keyword for defining ADTs
 
 }TokenType;
 

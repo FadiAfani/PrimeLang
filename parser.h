@@ -3,6 +3,7 @@
 
 #include "symbol_table.h"
 #include "lexer.h"
+#include "symbol.h"
 
 typedef enum NodeType {
     BIN_EXPR,
@@ -22,9 +23,11 @@ typedef enum NodeType {
     LAMBDA_EXPR,
     BLOCK_EXPR,
     COMPOUND_STMT,
-    ASSIGNMENT_STMT,
+    BREAK_EXPR,
     STURCT_DECL,
-    FUNC_DECL
+    FUNC_DECL, 
+    TYPE_DECL,
+    PREDEFINED_TYPE,
 
 
 }NodeType;
@@ -53,11 +56,16 @@ typedef struct ListIndexExpr {
     ASTNode* list_id;
 }ListIndexExpr;
 
+typedef struct BlockExpr {
+    Vector statements;
+    ASTNode* final_expr; // if exists, then the block is evaluated otherwise -> ()
+}BlockExpr;
+
 typedef struct IfExpr {
     ASTNode* cond;
-    ASTNode* block;
+    ASTNode* expr;
     Vector else_ifs;
-    ASTNode* else_block;
+    ASTNode* else_expr;
 }IfExpr;
 
 typedef struct ForExpr {
@@ -82,10 +90,15 @@ typedef struct FuncCallExpr {
 
 }FuncCallExpr;
 
-typedef struct AssignmentStmt {
-    ASTNode* left;
-    ASTNode* right;
-}AssignmentStmt;
+typedef struct BreakExpr {
+    ASTNode* expr;
+    NodeType expr_type;
+}BreakStmt;
+
+typedef struct SymbolNode {
+    ASTNode* sym_id;
+    Symbol* symbol;
+}SymbolNode;
 
 
 struct ASTNode {
@@ -94,13 +107,15 @@ struct ASTNode {
         UnExpr as_un_expr;
         ListExpr as_list_expr;
         FuncCallExpr as_func_call;
-        AssignmentStmt as_assignment_stmt;
+        Token as_type;
         Token as_literal_expr;
         Vector as_compound_statements;
         IfExpr as_if_expr;
         ForExpr as_for_expr;
         WhileExpr as_while_expr;
         ListIndexExpr as_list_index_expr;
+        BlockExpr as_block_expr;
+        SymbolNode as_symbol;
     };
     NodeType type;
 };
@@ -121,15 +136,17 @@ ASTNode* parse_factor(Parser* parser);
 ASTNode* parse_term(Parser* parser);
 ASTNode* parse_and(Parser* parser);
 ASTNode* parse_or(Parser* parser);
+ASTNode* parse_assignment(Parser* parser);
 ASTNode* parse_expr(Parser* parser);
 ASTNode* parse_group_expr(Parser* parser);
 ASTNode* parse_func_call(Parser* parser);
 ASTNode* parse_primary(Parser* parser);
-ASTNode* parse_assignment(Parser* parser);
 ASTNode* parse_statement(Parser* parser);
 ASTNode* parse_compound(Parser* parser);
 ASTNode* parse_list_index(Parser* parser);
 ASTNode* parse_block(Parser* parser);
+ASTNode* parse_if(Parser* parser);
+ASTNode* parse_elif(Parser* parser);
 
 void print_node(ASTNode* node, int depth);
 void free_ast_node(ASTNode* node);

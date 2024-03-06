@@ -110,7 +110,14 @@ static void tokenize_id(Lexer* lexer, Token* tok) {
         tok->type = WHILE;
     } else if (strcmp(value, "for") == 0) {
         tok->type = FOR;
-    } else {
+    } else if (strcmp(value, "then") == 0) {
+        tok->type = THEN;
+    } else if (strcmp(value, "break") == 0) {
+        tok->type = BREAK;
+    } else if (strcmp(value, "type") == 0) {
+        tok->type = KEYWORD_TYPE;
+    } 
+    else {
         tok->type = IDENTIFIER;
     } 
     lexer->pos.col += tok->value.size;
@@ -280,6 +287,14 @@ void tokenize(Lexer* lexer) {
             case '.':
                 lexer->cursor++;
                 lexer->pos.col++; 
+                if (READ_CHAR(lexer) == '.') {
+                    tok.type = RANGE;
+                    lexer->cursor++;
+                    lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, ".."};
+                    APPEND(lexer->tokens, tok, Token);
+                    break;
+                }
                 tok.type = DOT;
                 tok.value = (Vector) {1, 1, "."};
                 APPEND(lexer->tokens, tok, Token);
@@ -315,7 +330,14 @@ void tokenize(Lexer* lexer) {
                 tok.value = (Vector) {1, 1, "_"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
-
+            
+            case '|':
+                lexer->cursor++;
+                lexer->pos.col++;
+                tok.type = PIPE;
+                tok.value = (Vector) {1, 1, "|"};
+                APPEND(lexer->tokens, tok, Token);
+                break;
             case '=':
                 lexer->cursor++;
                 lexer->pos.col++;

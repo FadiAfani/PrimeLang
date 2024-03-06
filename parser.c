@@ -33,10 +33,6 @@ void free_ast_node(ASTNode* node) {
                 free_ast_node(INDEX_VECTOR(node->as_list_expr.items, ASTNode*, i));
             }
             break;
-        case ASSIGNMENT_STMT:
-            free_ast_node(node->as_assignment_stmt.left);
-            free_ast_node(node->as_assignment_stmt.right);
-            break;
         default:
             printf("free is not implemented for this node type\n");
             exit(EXIT_FAILURE);
@@ -71,11 +67,6 @@ void print_node(ASTNode* node, int depth) {
                 print_node(INDEX_VECTOR(node->as_list_expr.items, ASTNode*, i), depth + 1);
             }
             break;
-        case ASSIGNMENT_STMT:
-            printf("<assignment-statement>\n");
-            print_node(node->as_assignment_stmt.left, depth + 1);
-            print_node(node->as_assignment_stmt.right, depth + 1);
-            break;
         case COMPOUND_STMT:
             printf("<compound-statement>\n");
             for (size_t i = 0; i < node->as_compound_statements.size; i++) {
@@ -96,15 +87,15 @@ void print_node(ASTNode* node, int depth) {
         case IF_EXPR:
             printf("<if-expr>\n");
             print_node(node->as_if_expr.cond, depth + 1);
-            print_node(node->as_if_expr.block, depth + 1);
-            print_node(node->as_if_expr.else_block, depth + 1);
+            print_node(node->as_if_expr.expr, depth + 1);
+            print_node(node->as_if_expr.else_expr, depth + 1);
             for (size_t i = 0; i < node->as_if_expr.else_ifs.size; i++) {
                 print_node(INDEX_VECTOR(node->as_if_expr.else_ifs, ASTNode*, i), depth + 1);
             }
             break;
 
         default:
-            printf("print method is not implemented for this node type\n");
+            printf("print method is not implemented for this node type: %d\n", node->type);
             exit(EXIT_FAILURE);
 
     }
@@ -209,9 +200,9 @@ ASTNode* parse_literal(Parser* parser) {
         case STRING_LIT: 
             return parse_string_literal(parser);
         case BOOL_LIT:
-        default:
-            return NULL;
+        default: break;
     }
+    return NULL;
 }
 
 // <factor> := <literal> ( [ * | \ ] <literal> )*
@@ -461,6 +452,7 @@ ASTNode* parse_list_index(Parser* parser) {
 }
 
 ASTNode* parse_primary(Parser* parser) {
+    Token tok = READ_TOKEN(parser);
     switch(READ_TOKEN(parser).type) {
         case IDENTIFIER:
             if (PEEK_NEXT(parser).type == LPAREN) {
@@ -473,6 +465,8 @@ ASTNode* parse_primary(Parser* parser) {
         case LPAREN: return parse_tuple(parser);
         case LBRAC: return parse_list(parser);
         case LCURLY: return parse_block(parser);
+        case IF_EXPR: return parse_if(parser);
+        case BLOCK_EXPR: return parse_block(parser);
 
         default:
             printf("primary type not implemented: %d\n", READ_TOKEN(parser).type);
@@ -491,9 +485,11 @@ ASTNode* parse_block(Parser* parser) {
     INIT_VECTOR(vec, ASTNode*);
     node->type = BLOCK_EXPR;
 
-    while(!consume(parser, RCURLY)) {
-        APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
+    while(!consume(parser, TOK_EOF) && !consume(parser, RCURLY)) {
+        ASTNode* stmt = parse_statement(parser);
+        APPEND(node->as_compound_statements, stmt, ASTNode*);
     }
+
 
     return node;
 
@@ -506,7 +502,19 @@ ASTNode* parse_elif(Parser* parser) {
     Vector* vec = &(node->as_if_expr.else_ifs);
     INIT_VECTOR(vec, ASTNode*);
     node->as_if_expr.cond = parse_expr(parser);
-    node->as_if_expr.block = parse_block(parser);
+    node->type = IF_EXPR;
+
+    Token tok = READ_TOKEN(parser);
+    if (consume(parser, THEN)) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok.index, tok.value.size + tok.index,
+            tok.pos, "missing 'then' after if condition"}),
+            Error
+            );
+    }
+    node->as_if_expr.expr= parse_expr(parser);
     return node;
 }
 
@@ -517,54 +525,140 @@ ASTNode* parse_if(Parser* parser) {
     Vector* vec = &(node->as_if_expr.else_ifs);
     INIT_VECTOR(vec, ASTNode*);
     node->as_if_expr.cond = parse_expr(parser);
-    node->as_if_expr.block = parse_block(parser);
-    node->as_if_expr.else_block = NULL;
+    node->type = IF_EXPR;
+
+    Token tok = READ_TOKEN(parser);
+    if (consume(parser, THEN)) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok.index, tok.value.size + tok.index,
+            tok.pos, "missing 'then' after if condition"}),
+            Error
+            );
+    }
+    node->as_if_expr.expr = parse_expr(parser);
+    node->as_if_expr.else_expr = NULL;
     while(READ_TOKEN(parser).type == ELIF) {
         APPEND(node->as_if_expr.else_ifs, parse_elif(parser), ASTNode*);
     }
 
     if (consume(parser, ELSE)) {
-        node->as_if_expr.else_block = parse_block(parser);
+        node->as_if_expr.else_expr = parse_expr(parser);
     } 
     return node;
 }
 
-ASTNode* parse_expr(Parser* parser) {
-    return parse_or(parser);
+
+ASTNode* parse_range(Parser* parser) {
+    ASTNode* left = parse_or(parser);
+    Token tok = READ_TOKEN(parser);
+    if (!consume(parser, RANGE)) return left;
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->as_bin_expr.left = left;
+    node->as_bin_expr.right = parse_or(parser);
+    node->type = BIN_EXPR;
+    node->as_bin_expr.op = tok;
+
+    return node;
 }
 
-ASTNode* parse_assginment(Parser* parser) {
-    ASTNode* left = parse_expr(parser);
+static ASTNode* parse_type(Parser* parser) {
+    Token tok = READ_TOKEN(parser);
+    ASTNode* node;
+    switch (tok.type) {
+        case TYPE_INT:
+        case TYPE_DOUBLE:
+        case TYPE_STRING:
+        case TYPE_BOOL:
+            ALLOCATE(node, ASTNode, 1);
+            node->as_type = tok;
+            node->type = PREDEFINED_TYPE;
+            break;
+        default:
+            node = parse_identifier_literal(parser);
+            break;
+    }
+    return node;
+}
+
+static void parse_type_constructor(Parser* parser, Symbol* symbol) {
+    ASTNode* const_id = parse_identifier_literal(parser);
+    APPEND(symbol->as_type_symbol.enums, const_id, ASTNode*);
+    if (!consume(parser, LPAREN)) {
+        // no inner types / sub-types to parse
+        return;
+    }
+    ASTNode* fst_type = parse_type(parser);
+    Vector* inner_types;
+    INIT_VECTOR(inner_types, ASTNode);
+    APPEND((*inner_types), fst_type, ASTNode*);
+    while (consume(parser, COMMA)) {
+        APPEND((*inner_types), parse_type(parser), ASTNode*);
+    }
+    APPEND((**(symbol->as_type_symbol.inner_types)), inner_types, Vector*);
+}
+
+ASTNode* parse_type_decl(Parser* parser) {
+    consume(parser, KEYWORD_TYPE);
+    ASTNode* type_id = parse_identifier_literal(parser);
+
+    if (!consume(parser, EQ)) {
+        // report error
+        free_ast_node(type_id);
+        return NULL;
+    }
+
+    Symbol* sym;
+    ALLOCATE(sym, Symbol, 1);
+
+    parse_type_constructor(parser, sym);
+    while (consume(parser, PIPE)) {
+        parse_type_constructor(parser, sym);
+    }
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->type = TYPE_DECL;
+    node->as_symbol.sym_id = type_id;
+    node->as_symbol.symbol = sym;
+
+    return node;
+
+}
+
+ASTNode* parse_assignment(Parser* parser) {
+    ASTNode* left = parse_range(parser);
     Token eq = READ_TOKEN(parser);
     if (!consume(parser, EQ)) {
         return left;
     }
-    ASTNode* right = parse_expr(parser);
+    ASTNode* right = parse_range(parser);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
-    node->as_assignment_stmt.left = left;
-    node->as_assignment_stmt.right = right;
-    node->type = ASSIGNMENT_STMT;
+    node->as_bin_expr.op = eq;
+    node->as_bin_expr.left = left;
+    node->as_bin_expr.right = right;
+    node->type = BIN_EXPR;
 
     return node;
 }
+
+
+ASTNode* parse_expr(Parser* parser) {
+    ASTNode* node = parse_assignment(parser);
+    return node;
+}
+// <statement> := <block-based-expr> | <blockless-statement>
+// <blockless-statement> := <assignment>
+// <block-based-expr> := <if-expr> | <while-expr> | <for-expr> | <block-expr>
+
 
 ASTNode* parse_statement(Parser* parser) {
-    ASTNode* node = parse_assginment(parser);
-    Token semi_colon = READ_TOKEN(parser);
-    if (!consume(parser, SEMICOLON)) {
-
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            semi_colon.index, semi_colon.value.size + semi_colon.index,
-            semi_colon.pos, "missing ';' symbol"}),
-            Error
-            );
-        free_ast_node(node);
-        return NULL;
-    }
+    ASTNode* node = parse_expr(parser);
     return node;
 }
+
 
 ASTNode* parse_compound(Parser* parser) {
     ASTNode* node;
