@@ -97,7 +97,10 @@ void print_node(ASTNode* node, int depth) {
         case TYPE_DECL:
             printf("<type-decl>\n");
             print_node(node->as_symbol.sym_id, depth + 1);
-            //print_symbol(node->as_symbol.symbol);
+            for(int i = 0; i < depth + 1; i++) {
+                printf("\t");
+            }
+            print_symbol(node->as_symbol.symbol);
             break;
 
         default:
@@ -592,10 +595,11 @@ static ASTNode* parse_type(Parser* parser) {
 
 static void parse_type_constructor(Parser* parser, Symbol* symbol) {
     ASTNode* const_id = parse_identifier_literal(parser);
-    symbol->key = (char*) const_id->as_literal_expr.value.arr;
     APPEND(symbol->as_type_symbol.enums, const_id, ASTNode*);
     if (!consume(parser, LPAREN)) {
         // no inner types / sub-types to parse
+        // append a null representing no inner types
+        APPEND(symbol->as_type_symbol.inner_types, NULL, ASTNode*);
         return;
     }
     ASTNode* fst_type = parse_type(parser);
@@ -629,6 +633,7 @@ ASTNode* parse_type_decl(Parser* parser) {
     INIT_VECTOR((&(sym->as_type_symbol.enums)), Symbol);
     INIT_VECTOR((&sym->as_type_symbol.inner_types), Vector);
 
+    sym->key = (char*) type_id->as_literal_expr.value.arr;
     parse_type_constructor(parser, sym);
     while (consume(parser, PIPE)) {
         parse_type_constructor(parser, sym);
@@ -665,9 +670,6 @@ ASTNode* parse_expr(Parser* parser) {
     ASTNode* node = parse_assignment(parser);
     return node;
 }
-// <statement> := <block-based-expr> | <blockless-statement>
-// <blockless-statement> := <assignment>
-// <block-based-expr> := <if-expr> | <while-expr> | <for-expr> | <block-expr>
 
 
 ASTNode* parse_statement(Parser* parser) {

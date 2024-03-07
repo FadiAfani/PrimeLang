@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdio.h>
 
+
+
 static inline float get_load_factor(SymbolTable* table) {
     return table->entries.size / table->entries.capacity;
 }
@@ -41,7 +43,24 @@ void insert(SymbolTable* table, char* key, Symbol* value) {
 void print_symbol(Symbol* symbol) {
     switch(symbol->type) {
         case SYMBOL_TYPE:
-            printf("SYMBOL_TYPE: %s\n", symbol->key);
+            printf("SYMBOL_TYPE: %s --> ", symbol->key);
+            for (size_t i = 0; i < symbol->as_type_symbol.enums.size; i++) {
+                printf("Enum: %s ", CAST_VECTOR(INDEX_VECTOR(symbol->as_type_symbol.enums, ASTNode*, i)->as_literal_expr.value, char));
+                printf("( ");
+                Vector* vec = INDEX_VECTOR(symbol->as_type_symbol.inner_types, Vector*, i);
+                if (vec != NULL) {
+                    for (size_t j = 0; j < vec->size; j++) {
+                        ASTNode* node = INDEX_VECTOR((*vec), ASTNode*, j);
+                        if (node->type == PREDEFINED_TYPE) {
+                            printf("%s ", (char*) node->as_type.value.arr);
+                        } else {
+                            printf("%s ", (char*) node->as_literal_expr.value.arr);
+                        }
+                    }
+                }
+                printf(") ");
+            }
+            printf("\n");
             break;
         case SYMBOL_VARIABLE:
             printf("SYMBOL_VARIABLE: %s\n", symbol->key);

@@ -2,8 +2,10 @@
 #define SYMBOL_H
 
 #include "vector.h"
+#include "ast_node.h"
 
 #define LOAD_FACTOR 0.8
+
 
 typedef enum SymbolType {
     SYMBOL_TYPE,

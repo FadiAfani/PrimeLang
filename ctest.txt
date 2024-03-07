@@ -1,1 +1,1 @@
-type someType = Nothing | SomeThing (int)
+type someType = Nothing | SomeThing (int, int)
