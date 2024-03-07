@@ -94,6 +94,12 @@ void print_node(ASTNode* node, int depth) {
             }
             break;
 
+        case TYPE_DECL:
+            printf("<type-decl>\n");
+            print_node(node->as_symbol.sym_id, depth + 1);
+            //print_symbol(node->as_symbol.symbol);
+            break;
+
         default:
             printf("print method is not implemented for this node type: %d\n", node->type);
             exit(EXIT_FAILURE);
@@ -575,6 +581,7 @@ static ASTNode* parse_type(Parser* parser) {
             ALLOCATE(node, ASTNode, 1);
             node->as_type = tok;
             node->type = PREDEFINED_TYPE;
+            parser->cursor++;
             break;
         default:
             node = parse_identifier_literal(parser);
@@ -585,6 +592,7 @@ static ASTNode* parse_type(Parser* parser) {
 
 static void parse_type_constructor(Parser* parser, Symbol* symbol) {
     ASTNode* const_id = parse_identifier_literal(parser);
+    symbol->key = (char*) const_id->as_literal_expr.value.arr;
     APPEND(symbol->as_type_symbol.enums, const_id, ASTNode*);
     if (!consume(parser, LPAREN)) {
         // no inner types / sub-types to parse
@@ -592,12 +600,18 @@ static void parse_type_constructor(Parser* parser, Symbol* symbol) {
     }
     ASTNode* fst_type = parse_type(parser);
     Vector* inner_types;
+    ALLOCATE(inner_types, ASTNode, 1);
     INIT_VECTOR(inner_types, ASTNode);
     APPEND((*inner_types), fst_type, ASTNode*);
     while (consume(parser, COMMA)) {
         APPEND((*inner_types), parse_type(parser), ASTNode*);
     }
-    APPEND((**(symbol->as_type_symbol.inner_types)), inner_types, Vector*);
+    APPEND(symbol->as_type_symbol.inner_types, inner_types, Vector*);
+
+    if (!consume(parser, RPAREN)) {
+        //report error and free memory
+        return;
+    }
 }
 
 ASTNode* parse_type_decl(Parser* parser) {
@@ -612,6 +626,8 @@ ASTNode* parse_type_decl(Parser* parser) {
 
     Symbol* sym;
     ALLOCATE(sym, Symbol, 1);
+    INIT_VECTOR((&(sym->as_type_symbol.enums)), Symbol);
+    INIT_VECTOR((&sym->as_type_symbol.inner_types), Vector);
 
     parse_type_constructor(parser, sym);
     while (consume(parser, PIPE)) {
@@ -655,6 +671,10 @@ ASTNode* parse_expr(Parser* parser) {
 
 
 ASTNode* parse_statement(Parser* parser) {
+    switch(READ_TOKEN(parser).type) {
+        case KEYWORD_TYPE:
+            return parse_type_decl(parser);
+    }
     ASTNode* node = parse_expr(parser);
     return node;
 }

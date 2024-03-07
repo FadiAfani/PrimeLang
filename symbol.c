@@ -1,5 +1,6 @@
 #include "symbol.h"
 #include <string.h>
+#include <stdio.h>
 
 static inline float get_load_factor(SymbolTable* table) {
     return table->entries.size / table->entries.capacity;
@@ -35,5 +36,32 @@ void insert(SymbolTable* table, char* key, Symbol* value) {
         }
 
     }
+}
+
+void print_symbol(Symbol* symbol) {
+    switch(symbol->type) {
+        case SYMBOL_TYPE:
+            printf("SYMBOL_TYPE: %s\n", symbol->key);
+            break;
+        case SYMBOL_VARIABLE:
+            printf("SYMBOL_VARIABLE: %s\n", symbol->key);
+            break;
+        case SYMBOL_FUNCTION:
+            printf("SYMBOL_FUNCTION: %s\n", symbol->key);
+            break;
+        default:
+            printf("print_symbol: unrecognized symbol \n");
+            exit(EXIT_FAILURE);
+    }
+}
+
+void print_symbol_table(SymbolTable* table) {
+    if (table == NULL) return;
+    printf("------------------------------------\n");
+    for (size_t i = 0; i < table->entries.size; i++) {
+        print_symbol(INDEX_VECTOR(table->entries, Symbol*, i));
+    }
+    printf("------------------------------------\n");
+    print_symbol_table(table->parent);
 }
 

@@ -19,7 +19,7 @@ typedef enum SymbolType {
 
 typedef struct TypeSymbol {
     Vector enums;
-    Vector** inner_types; 
+    Vector inner_types; 
 }TypeSymbol;
 
 typedef struct Symbol {
@@ -39,5 +39,8 @@ struct SymbolTable {
 
 Symbol* lookup(SymbolTable* table, char* key);
 void insert(SymbolTable* table, char* key, Symbol* value);
+void print_symbol(Symbol* symbol);
+void print_symbol_table(SymbolTable* table);
+
 
 #endif
