@@ -49,6 +49,11 @@ void print_node(ASTNode* node, int depth) {
     switch(node->type) {
         case LITERAL_EXPR:
             printf("<literal>: %s\n", (char*) node->as_literal_expr.value.arr);
+            if (node->as_literal_expr.type == IDENTIFIER && node->as_id_literal.id_type != NULL) {
+                for (size_t i = 0; i < node->as_id_literal.id_type->size; i++) {
+                    print_node(INDEX_VECTOR((*node->as_id_literal.id_type), ASTNode*, i), depth + 1);
+                }
+            }
             break;
         case BIN_EXPR:
             printf("<binary-expr>: %s\n", CAST_VECTOR(node->as_bin_expr.op.value, char));
@@ -96,11 +101,51 @@ void print_node(ASTNode* node, int depth) {
 
         case TYPE_DECL:
             printf("<type-decl>\n");
-            print_node(node->as_symbol.sym_id, depth + 1);
+            print_node(node->as_type_decl.sym_id, depth + 1);
             for(int i = 0; i < depth + 1; i++) {
                 printf("\t");
             }
-            print_symbol(node->as_symbol.symbol);
+            //print_symbol(node->as_type_decl.symbol);
+            break;
+
+        case FUNC_DECL:
+            printf("<func-decl>\n");
+            print_node(node->as_func_decl.sym_id, depth + 1);
+            Vector vec = node->as_func_decl.parameters;
+            for(size_t i = 0; i < vec.size; i++) {
+                print_node((INDEX_VECTOR(vec, ASTNode*, i)), depth + 1);
+            }
+            print_node(node->as_func_decl.block, depth + 1);
+            break;
+
+        case PREDEFINED_TYPE:
+            printf("<predefined-type>:");
+            switch(node->as_type.type) {
+                case UNIT:
+                    printf("()\n");
+                    break;
+                case TYPE_BOOL:
+                    printf("bool\n");
+                    break;
+                case TYPE_BYTE:
+                    printf("byte\n");
+                    break;
+                case TYPE_INT:
+                    printf("int\n");
+                    break;
+                case TYPE_DOUBLE:
+                    printf("double\n");
+                    break;
+                case TYPE_CHAR:
+                    printf("char\n");
+                    break;
+                case TYPE_STRING:
+                    printf("string\n");
+                    break;
+                default:
+                    printf("%s", (char*) node->as_type.value.arr);
+                    break;
+            }
             break;
 
         default:
@@ -120,25 +165,35 @@ static bool consume(Parser* parser, TokenType token_type) {
     return false;
 }
 
+void parse_type_annotation(Parser* parser, ASTNode* node) {
+    ASTNode* fst_type = parse_type(parser);
+    Vector* vec;
+    ALLOCATE(vec, Vector, 1);
+    INIT_VECTOR((*vec), ASTNode*);
+    APPEND((*vec), fst_type, ASTNode*);
+
+    while(consume(parser, ARROW)) {
+        APPEND((*vec), parse_type(parser), ASTNode*);
+    }
+
+    node->as_id_literal.id_type = vec;
+}
+
 ASTNode* parse_identifier_literal(Parser* parser) {
 
     Token tok = READ_TOKEN(parser);
+    consume(parser,IDENTIFIER);
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->as_id_literal.id_token= tok;
+    node->type = LITERAL_EXPR;
 
-    if (consume(parser, IDENTIFIER)) {
-        ASTNode* node;
-        ALLOCATE(node, ASTNode, 1);
-        node->as_literal_expr = tok;
-        node->type = LITERAL_EXPR;
-        return node;
-    } 
+    if (consume(parser, COLON)) {
+        parse_type_annotation(parser, node);
+    }
+
     
-    APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-                tok.index, tok.index + tok.value.size,
-                tok.pos, "expected an identifier"}),
-                Error
-          );
-    return NULL;
+    return node;
 }
 
 ASTNode* parse_int_literal(Parser* parser) {
@@ -392,8 +447,7 @@ ASTNode* parse_func_call(Parser* parser) {
 
     ASTNode* node = NULL;
     ALLOCATE(node, ASTNode, 1);
-    Vector* vec = &(node->as_func_call.params);
-    INIT_VECTOR(vec, ASTNode*);
+    INIT_VECTOR(node->as_func_call.params, ASTNode*);
     APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
     node->type = FUNC_CALL_EXPR;
 
@@ -480,7 +534,7 @@ ASTNode* parse_primary(Parser* parser) {
         default:
             printf("primary type not implemented: %d\n", READ_TOKEN(parser).type);
             exit(EXIT_FAILURE);
-            
+
     }
     return NULL;
 
@@ -490,14 +544,15 @@ ASTNode* parse_block(Parser* parser) {
     consume(parser, LCURLY);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
-    Vector* vec = &(node->as_compound_statements);
-    INIT_VECTOR(vec, ASTNode*);
+    INIT_VECTOR(node->as_compound_statements, ASTNode*);
     node->type = BLOCK_EXPR;
 
     while(!consume(parser, TOK_EOF) && !consume(parser, RCURLY)) {
         ASTNode* stmt = parse_statement(parser);
         APPEND(node->as_compound_statements, stmt, ASTNode*);
     }
+
+    INIT_SYMBOL_TABLE(node->as_block_expr.table);
 
 
     return node;
@@ -508,8 +563,7 @@ ASTNode* parse_elif(Parser* parser) {
     consume(parser, ELIF);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
-    Vector* vec = &(node->as_if_expr.else_ifs);
-    INIT_VECTOR(vec, ASTNode*);
+    INIT_VECTOR(node->as_if_expr.else_ifs, ASTNode*);
     node->as_if_expr.cond = parse_expr(parser);
     node->type = IF_EXPR;
 
@@ -531,8 +585,7 @@ ASTNode* parse_if(Parser* parser) {
     consume(parser, IF);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
-    Vector* vec = &(node->as_if_expr.else_ifs);
-    INIT_VECTOR(vec, ASTNode*);
+    INIT_VECTOR(node->as_if_expr.else_ifs, ASTNode*);
     node->as_if_expr.cond = parse_expr(parser);
     node->type = IF_EXPR;
 
@@ -573,7 +626,7 @@ ASTNode* parse_range(Parser* parser) {
     return node;
 }
 
-static ASTNode* parse_type(Parser* parser) {
+ASTNode* parse_type(Parser* parser) {
     Token tok = READ_TOKEN(parser);
     ASTNode* node;
     switch (tok.type) {
@@ -581,6 +634,7 @@ static ASTNode* parse_type(Parser* parser) {
         case TYPE_DOUBLE:
         case TYPE_STRING:
         case TYPE_BOOL:
+        case UNIT:
             ALLOCATE(node, ASTNode, 1);
             node->as_type = tok;
             node->type = PREDEFINED_TYPE;
@@ -593,24 +647,24 @@ static ASTNode* parse_type(Parser* parser) {
     return node;
 }
 
-static void parse_type_constructor(Parser* parser, Symbol* symbol) {
+void parse_type_constructor(Parser* parser, ASTNode* node) {
     ASTNode* const_id = parse_identifier_literal(parser);
-    APPEND(symbol->as_type_symbol.enums, const_id, ASTNode*);
+    APPEND(node->as_type_decl.enums, const_id, ASTNode*);
     if (!consume(parser, LPAREN)) {
         // no inner types / sub-types to parse
         // append a null representing no inner types
-        APPEND(symbol->as_type_symbol.inner_types, NULL, ASTNode*);
+        APPEND(node->as_type_decl.inner_types, NULL, ASTNode*);
         return;
     }
     ASTNode* fst_type = parse_type(parser);
     Vector* inner_types;
     ALLOCATE(inner_types, ASTNode, 1);
-    INIT_VECTOR(inner_types, ASTNode);
+    INIT_VECTOR((*inner_types), ASTNode);
     APPEND((*inner_types), fst_type, ASTNode*);
     while (consume(parser, COMMA)) {
         APPEND((*inner_types), parse_type(parser), ASTNode*);
     }
-    APPEND(symbol->as_type_symbol.inner_types, inner_types, Vector*);
+    APPEND(node->as_type_decl.inner_types, inner_types, Vector*);
 
     if (!consume(parser, RPAREN)) {
         //report error and free memory
@@ -628,21 +682,57 @@ ASTNode* parse_type_decl(Parser* parser) {
         return NULL;
     }
 
-    Symbol* sym;
-    ALLOCATE(sym, Symbol, 1);
-    INIT_VECTOR((&(sym->as_type_symbol.enums)), Symbol);
-    INIT_VECTOR((&sym->as_type_symbol.inner_types), Vector);
-
-    sym->key = (char*) type_id->as_literal_expr.value.arr;
-    parse_type_constructor(parser, sym);
-    while (consume(parser, PIPE)) {
-        parse_type_constructor(parser, sym);
-    }
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     node->type = TYPE_DECL;
-    node->as_symbol.sym_id = type_id;
-    node->as_symbol.symbol = sym;
+    node->as_type_decl.sym_id = type_id;
+    INIT_VECTOR(node->as_type_decl.enums, Symbol);
+    INIT_VECTOR(node->as_type_decl.inner_types, Vector);
+
+    parse_type_constructor(parser, node);
+    while (consume(parser, PIPE)) {
+        parse_type_constructor(parser, node);
+    }
+
+    return node;
+
+}
+
+void parse_func_param(Parser* parser, ASTNode* node) {
+    if (READ_TOKEN(parser).type == LPAREN) {
+        consume(parser, LPAREN);
+        APPEND(node->as_func_decl.parameters, parse_identifier_literal(parser), ASTNode*);
+        if (!consume(parser, RPAREN)) {
+            //report error and free memory
+            return;
+        }
+    } else if (READ_TOKEN(parser).type == UNIT) {
+        APPEND(node->as_func_decl.parameters, parse_type(parser), ASTNode*);
+    } else {
+        // report error and free memory
+        return;
+    }
+}
+
+ASTNode* parse_func_decl(Parser* parser) {
+    ASTNode* func_id = parse_identifier_literal(parser);
+    if (!consume(parser, DOUBLE_COLON)) {
+        // report an error
+        free_ast_node(func_id);
+        return NULL;
+    }
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    INIT_VECTOR(node->as_func_decl.parameters, ASTNode*);
+    node->as_func_decl.sym_id = func_id;
+    node->type = FUNC_DECL;
+
+    parse_func_param(parser, node);
+    while(consume(parser, ARROW)) {
+        parse_func_param(parser, node);
+    }
+
+    node->as_func_decl.block = parse_block(parser);
 
     return node;
 
@@ -676,6 +766,10 @@ ASTNode* parse_statement(Parser* parser) {
     switch(READ_TOKEN(parser).type) {
         case KEYWORD_TYPE:
             return parse_type_decl(parser);
+        
+    }
+    if (READ_TOKEN(parser).type == IDENTIFIER && PEEK_NEXT(parser).type == DOUBLE_COLON) {
+        return parse_func_decl(parser);
     }
     ASTNode* node = parse_expr(parser);
     return node;
@@ -685,8 +779,7 @@ ASTNode* parse_statement(Parser* parser) {
 ASTNode* parse_compound(Parser* parser) {
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
-    Vector* vec = &(node->as_compound_statements);
-    INIT_VECTOR(vec, ASTNode);
+    INIT_VECTOR(node->as_compound_statements, ASTNode);
     node->type = COMPOUND_STMT;
     while(!consume(parser, TOK_EOF)) {
         APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
@@ -702,6 +795,7 @@ int main(int argc, char** argv) {
     load_file_into_memory(&(parser->lexer), "ctest.txt");
     tokenize(&(parser->lexer));
     ASTNode* root = parse_compound(parser);
+   // print_lexer(&parser->lexer);
     print_node(root, 0);
 
     return 0;

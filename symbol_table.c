@@ -1,4 +1,5 @@
-#include "symbol.h"
+#include "symbol_table.h"
+#include "ast_node.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -44,10 +45,10 @@ void print_symbol(Symbol* symbol) {
     switch(symbol->type) {
         case SYMBOL_TYPE:
             printf("SYMBOL_TYPE: %s --> ", symbol->key);
-            for (size_t i = 0; i < symbol->as_type_symbol.enums.size; i++) {
-                printf("Enum: %s ", CAST_VECTOR(INDEX_VECTOR(symbol->as_type_symbol.enums, ASTNode*, i)->as_literal_expr.value, char));
+            for (size_t i = 0; i < symbol->as_type_symbol.size; i++) {
+                printf("Enum: %s ", CAST_VECTOR(INDEX_VECTOR(symbol->as_type_symbol, ASTNode*, i)->as_literal_expr.value, char));
                 printf("( ");
-                Vector* vec = INDEX_VECTOR(symbol->as_type_symbol.inner_types, Vector*, i);
+                Vector* vec = INDEX_VECTOR(symbol->as_type_symbol, Vector*, i);
                 if (vec != NULL) {
                     for (size_t j = 0; j < vec->size; j++) {
                         ASTNode* node = INDEX_VECTOR((*vec), ASTNode*, j);

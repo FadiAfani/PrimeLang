@@ -18,9 +18,9 @@
 })
 
 #define INIT_VECTOR(vector, type) ({ \
-    vector->capacity = INIT_VECTOR_CAP; \
-    vector->size = 0; \
-    ALLOCATE(vector->arr, type, INIT_VECTOR_CAP); \
+    vector.capacity = INIT_VECTOR_CAP; \
+    vector.size = 0; \
+    ALLOCATE(vector.arr, type, INIT_VECTOR_CAP); \
 })
 
 typedef struct Vector{

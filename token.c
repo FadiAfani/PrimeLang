@@ -53,8 +53,8 @@ static void print_token_type(TokenType type) {
         case UNDERSCORE: printf("UNDERSCORE\n"); break;
         case UNIT: printf("UNIT\n"); break;
         case DOT: printf("DOT\n"); break;
-        case EOF: printf("EOF\n"); break;
-        default: printf("UNKNOWN_TOKEN_TYPE\n");
+        case TOK_EOF: printf("EOF\n"); break;
+        default: printf("UNKNOWN_TOKEN_TYPE: %d\n", type);
     }
 }
 void print_token(Token token) {

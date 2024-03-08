@@ -2,7 +2,7 @@
 #define SYMBOL_H
 
 #include "vector.h"
-#include "ast_node.h"
+#include "type.h"
 
 #define LOAD_FACTOR 0.8
 
@@ -11,38 +11,32 @@ typedef enum SymbolType {
     SYMBOL_TYPE,
     SYMBOL_VARIABLE,
     SYMBOL_FUNCTION,
+    SYMBOL_ENUM
 
 }SymbolType;
 
-/*
- * enums[i] is the enum
- * inner_types[i] is a vector
- * */
+/**
+ * parameters contains keys (char*) to other symbols
+ * func_type is the function's type 
+*/
 
-typedef struct TypeSymbol {
-    Vector enums;
-    Vector inner_types; 
-}TypeSymbol;
+typedef struct FuncSymbol {
+    Vector parameters;
+    PrimeType* func_type;
+}FuncSymbol;
+
 
 typedef struct Symbol {
     char* key;
     union {
-        TypeSymbol as_type_symbol;
+        PrimeType* as_var_symbol;
+        Vector as_type_symbol; // vector of enum keys (char*)
+        Vector as_enum_symbol; // vector of PrimeType's
+        FuncSymbol as_func_symbol; // vector storing function parameters
     };
     SymbolType type;
 }Symbol;
 
-typedef struct SymbolTable SymbolTable;
-
-struct SymbolTable {
-    Vector entries;
-    SymbolTable* parent;
-};
-
-Symbol* lookup(SymbolTable* table, char* key);
-void insert(SymbolTable* table, char* key, Symbol* value);
-void print_symbol(Symbol* symbol);
-void print_symbol_table(SymbolTable* table);
 
 
 #endif

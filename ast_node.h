@@ -2,7 +2,8 @@
 #define AST_NODE_H
 
 #include "token.h"
-
+#include "symbol.h"
+#include "symbol_table.h"
 
 typedef enum NodeType {
     BIN_EXPR,
@@ -33,6 +34,17 @@ typedef enum NodeType {
 
 typedef struct ASTNode ASTNode;
 typedef struct Symbol Symbol;
+typedef struct TypeList TypeList;
+
+struct TypeList {
+    ASTNode* node;
+    TypeList* next;
+};
+
+typedef struct IdentifierExpr {
+    Token id_token;
+    Vector* id_type;
+}IdentifierExpr;
 
 typedef struct BinExpr {
     Token op;
@@ -58,7 +70,7 @@ typedef struct ListIndexExpr {
 
 typedef struct BlockExpr {
     Vector statements;
-    ASTNode* final_expr; // if exists, then the block is evaluated otherwise -> ()
+    SymbolTable table;
 }BlockExpr;
 
 typedef struct IfExpr {
@@ -95,14 +107,26 @@ typedef struct BreakExpr {
     NodeType expr_type;
 }BreakStmt;
 
-typedef struct SymbolNode {
+/*
+ * enums[i] is the enum
+ * inner_types[i] is a vector
+ * */
+typedef struct TypeDecl {
     ASTNode* sym_id;
-    Symbol* symbol;
-}SymbolNode;
+    Vector enums;
+    Vector inner_types; 
+}TypeDecl;
+
+typedef struct FuncDecl {
+    ASTNode* sym_id;
+    ASTNode* block;
+    Vector parameters; // vector of ASTNode*
+}FuncDecl;
 
 
 struct ASTNode {
     union {
+        IdentifierExpr as_id_literal;
         BinExpr as_bin_expr;
         UnExpr as_un_expr;
         ListExpr as_list_expr;
@@ -115,7 +139,8 @@ struct ASTNode {
         WhileExpr as_while_expr;
         ListIndexExpr as_list_index_expr;
         BlockExpr as_block_expr;
-        SymbolNode as_symbol;
+        TypeDecl as_type_decl;
+        FuncDecl as_func_decl;
     };
     NodeType type;
 };

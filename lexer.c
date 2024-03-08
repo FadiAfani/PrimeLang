@@ -180,10 +180,16 @@ void tokenize(Lexer* lexer) {
                     lexer->cursor++;
                     tok.value = (Vector) {2, 2, "-="};
                     lexer->pos.col++;
-                } else {
-                    tok.type = MINUS;
+                } else if(READ_CHAR(lexer) == '>') {
+                    tok.type = ARROW;
+                    tok.value = (Vector) {2, 2, "->"};
+                    lexer->cursor++;
+                    lexer->pos.col++;
                 }
-                tok.value = (Vector) {1, 1, "-"};
+                else {
+                    tok.type = MINUS;
+                    tok.value = (Vector) {1, 1, "-"};
+                }
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '*':
@@ -196,8 +202,8 @@ void tokenize(Lexer* lexer) {
                     tok.value = (Vector) {2, 2, "*="};
                 } else {
                     tok.type = MULT;
+                    tok.value = (Vector) {1, 1, "*"};
                 } 
-                tok.value = (Vector) {1, 1, "*"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '/':
@@ -210,8 +216,8 @@ void tokenize(Lexer* lexer) {
                     tok.value = (Vector) {2, 2, "/="};
                 } else {
                     tok.type = DIV;
+                    tok.value = (Vector) {1, 1, "/"};
                 } 
-                tok.value = (Vector) {1, 1, "/"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ';':
@@ -224,8 +230,15 @@ void tokenize(Lexer* lexer) {
             case ':':
                 lexer->cursor++;
                 lexer->pos.col++;
-                tok.type = COLON;
-                tok.value = (Vector) {1, 1, ":"};
+                if (READ_CHAR(lexer) == ':') {
+                    tok.type = DOUBLE_COLON;
+                    lexer->cursor++;
+                    lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "::"};
+                } else {
+                    tok.type = COLON;
+                    tok.value = (Vector) {1, 1, ":"};
+                }
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ',':
@@ -245,8 +258,8 @@ void tokenize(Lexer* lexer) {
                     tok.value = (Vector) {2, 2, "()"};
                 } else {
                     tok.type = LPAREN;
+                    tok.value = (Vector) {1, 1, "("};
                 }
-                tok.value = (Vector) {1, 1, "("};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case ')':
@@ -310,8 +323,8 @@ void tokenize(Lexer* lexer) {
                     tok.value = (Vector) {2, 2, "!="};
                 } else {
                     tok.type = NOT;
+                    tok.value = (Vector) {1, 1, "!"};
                 }
-                tok.value = (Vector) {1, 1, "!"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
 
@@ -348,8 +361,8 @@ void tokenize(Lexer* lexer) {
                     tok.value = (Vector) {2, 2, "=="};
                 } else {
                     tok.type = EQ;
+                    tok.value = (Vector) {1, 1, "="};
                 }
-                tok.value = (Vector) {1, 1, "="};
                 APPEND(lexer->tokens, tok, Token);
                 break;
 

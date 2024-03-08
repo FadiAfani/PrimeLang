@@ -65,6 +65,7 @@ typedef enum TokenType {
     BREAK,
     THEN,
     RANGE,
+    DOUBLE_COLON,
     PIPE, // '|'
     KEYWORD_TYPE, // "type" keyword for defining ADTs
 
