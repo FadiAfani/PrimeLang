@@ -23,9 +23,9 @@ static void print_token_type(TokenType type) {
         case NOT: printf("NOT\n"); break;
         case NEQ: printf("NEQ\n"); break;
         case BT: printf("BT\n"); break;
-        case ST: printf("ST\n"); break;
+        case LT: printf("LT\n"); break;
         case BTE: printf("BTE\n"); break;
-        case STE: printf("STE\n"); break;
+        case LTE: printf("LTE\n"); break;
         case ARROW: printf("ARROW\n"); break;
         case LCURLY: printf("LCURLY\n"); break;
         case RCURLY: printf("RCURLY\n"); break;

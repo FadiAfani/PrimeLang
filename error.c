@@ -15,7 +15,7 @@ void print_error(Error error, char* filename, char* src) {
     }
 
     printf("%d | \t", error.pos.row);
-    for (size_t i = 0; i < error.src_end_pos - error.src_start_pos + 1, i++) {
+    for (size_t i = 0; i < error.src_end_pos - error.src_start_pos + 1; i++) {
         if (src[i] == '\n' || src[i] == '\r') {
             num_lines++;
             printf("\n%d | \t", error.pos.row + num_lines);
@@ -23,4 +23,12 @@ void print_error(Error error, char* filename, char* src) {
             printf("%c", src[i]);
         }
     }
+}
+
+void set_error(Error* err, ErrorType err_type, size_t start_pos, size_t end_pos, Position pos, const char* msg) {
+    err->type = err_type;
+    err->src_start_pos = start_pos;
+    err->src_end_pos = end_pos;
+    err->pos = pos;
+    err->err_msg = msg;
 }
