@@ -1,5 +1,7 @@
 #include "error.h"
-
+/**
+ * formats an error message
+*/
 void print_error(Error error, char* filename, char* src) {
     size_t num_lines = 0;
     switch(error.type) {
@@ -14,21 +16,31 @@ void print_error(Error error, char* filename, char* src) {
             exit(EXIT_FAILURE);
     }
 
-    printf("%d | \t", error.pos.row);
-    for (size_t i = 0; i < error.src_end_pos - error.src_start_pos + 1; i++) {
+    /**
+     * starts from the very beginning of the row and column of where the error ocurred
+    */
+
+    printf("%ld |  ", error.pos.row);
+    for (size_t i = error.src_start_pos - error.pos.col + 1; i < error.src_end_pos; i++) {
         if (src[i] == '\n' || src[i] == '\r') {
             num_lines++;
-            printf("\n%d | \t", error.pos.row + num_lines);
+            printf("%ld |  \n", error.pos.row + num_lines);
+        } else if (i == error.src_start_pos) {
+            printf("%c\n", src[i]);
+            printf("%ld |  ", error.pos.row + num_lines + 1);
+            for (size_t i = 0; i < error.pos.col - 1; i++) {
+                printf(" ");
+            }
+            printf("^");
+            for (int i = error.src_start_pos; i < error.src_end_pos - 1; i++) {
+                printf("~");
+            }
+            printf("\n");
         } else {
             printf("%c", src[i]);
         }
     }
+   
 }
 
-void set_error(Error* err, ErrorType err_type, size_t start_pos, size_t end_pos, Position pos, const char* msg) {
-    err->type = err_type;
-    err->src_start_pos = start_pos;
-    err->src_end_pos = end_pos;
-    err->pos = pos;
-    err->err_msg = msg;
-}
+

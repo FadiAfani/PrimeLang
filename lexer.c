@@ -90,6 +90,7 @@ static void tokenize_id(Lexer* lexer, Token* tok) {
     ALLOCATE(tok->value.arr, char, INIT_VECTOR_CAP);
     char c;
     while ((c = READ_CHAR(lexer)) != '\0' && isalpha(c)) {
+        lexer->pos.col++;
         lexer->cursor++;
         APPEND(tok->value, c, char);
     }
@@ -120,7 +121,6 @@ static void tokenize_id(Lexer* lexer, Token* tok) {
     else {
         tok->type = IDENTIFIER;
     } 
-    lexer->pos.col += tok->value.size;
 
 }
 
@@ -128,12 +128,12 @@ static void tokenize_int(Lexer* lexer, Token* tok) {
     ALLOCATE(tok->value.arr, char, INIT_VECTOR_CAP);
     char c;
     while((c = READ_CHAR(lexer)) != '\0' && isdigit(c)) {
+        lexer->pos.col++;
         lexer->cursor++;
         APPEND(tok->value, c, char);
     }
     APPEND(tok->value, '\0', char);
     tok->type = INT_LIT;
-    lexer->pos.col += tok->value.size;
 
 }
 

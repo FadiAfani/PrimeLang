@@ -142,6 +142,9 @@ struct ASTNode {
         TypeDecl as_type_decl;
         FuncDecl as_func_decl;
     };
+    Position node_pos;
+    size_t node_src_start;
+    size_t node_src_end;
     NodeType type;
 };
 

@@ -19,6 +19,5 @@ typedef struct Error {
 }Error;
 
 void print_error(Error error, char* filename, char* src);
-void set_error(Error* err, ErrorType err_type, size_t start_pos, size_t end_pos, Position pos, const char* msg);
 
 #endif

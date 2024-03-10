@@ -273,7 +273,7 @@ ASTNode* parse_literal(Parser* parser) {
 ASTNode* parse_factor(Parser* parser) {
     ASTNode* node = parse_primary(parser);
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         Token tok = READ_TOKEN(parser);
         if (consume(parser, MULT) || consume(parser, DIV)) {
             ASTNode* new_node;
@@ -292,7 +292,7 @@ ASTNode* parse_factor(Parser* parser) {
 ASTNode* parse_term(Parser* parser) {
     ASTNode* node = parse_factor(parser);
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         Token tok = READ_TOKEN(parser);
         if (consume(parser, PLUS) || consume(parser, MINUS)) {
             ASTNode* new_node;
@@ -310,7 +310,7 @@ ASTNode* parse_term(Parser* parser) {
 ASTNode* parse_and(Parser* parser) {
     ASTNode* node = parse_term(parser);
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         Token tok = READ_TOKEN(parser);
         if (consume(parser, AND)) {
             ASTNode* new_node;
@@ -328,7 +328,7 @@ ASTNode* parse_and(Parser* parser) {
 ASTNode* parse_or(Parser* parser) {
     ASTNode* node = parse_and(parser);
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         Token tok = READ_TOKEN(parser);
         if (consume(parser, OR)) {
             ASTNode* new_node;
@@ -345,6 +345,7 @@ ASTNode* parse_or(Parser* parser) {
 
 ASTNode* parse_list(Parser* parser) {
 
+    Token tok = READ_TOKEN(parser);
     consume(parser, LBRAC);
 
     ASTNode* node;
@@ -354,7 +355,7 @@ ASTNode* parse_list(Parser* parser) {
     APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
     node->type = LIST_EXPR;
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         Token tok = READ_TOKEN(parser);
         if (consume(parser, COMMA)) {
             APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
@@ -369,8 +370,8 @@ ASTNode* parse_list(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            brac.index, brac.value.size + brac.index,
-            brac.pos, "missing ']' symbol"}),
+            tok.index, tok.value.size + tok.index,
+            tok.pos, "unclosed delimiter, missing ']' at the end of the list literal"}),
             Error
             );
 
@@ -400,7 +401,7 @@ ASTNode* parse_tuple(Parser* parser) {
     APPEND(node->as_list_expr.items, expr, ASTNode*);
     node->type = TUPLE_EXPR;
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         if (consume(parser, COMMA)) {
             APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
         } else {
@@ -451,7 +452,7 @@ ASTNode* parse_func_call(Parser* parser) {
     APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
     node->type = FUNC_CALL_EXPR;
 
-    while(true) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         Token tok = READ_TOKEN(parser);
         if (consume(parser, COMMA)) {
             APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
@@ -532,26 +533,43 @@ ASTNode* parse_primary(Parser* parser) {
         case BLOCK_EXPR: return parse_block(parser);
 
         default:
-            printf("primary type not implemented: %d\n", READ_TOKEN(parser).type);
-            exit(EXIT_FAILURE);
+            parser->cursor++;
+            return NULL;
 
     }
     return NULL;
 
 }
 
+
 ASTNode* parse_block(Parser* parser) {
+    Token lcurly = READ_TOKEN(parser);
     consume(parser, LCURLY);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_compound_statements, ASTNode*);
     node->type = BLOCK_EXPR;
+    bool unclosed = true;
 
-    while(!consume(parser, TOK_EOF) && !consume(parser, RCURLY)) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         ASTNode* stmt = parse_statement(parser);
         APPEND(node->as_compound_statements, stmt, ASTNode*);
+        if (consume(parser, RCURLY)) {
+            unclosed = false;
+            break;
+        }
     }
-
+    Token eof_tok = READ_TOKEN(parser);
+    printf("%d\n", eof_tok.type);
+    if (unclosed) {
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            lcurly.index, lcurly.index + 1,
+            lcurly.pos, "unclosed delimiter, missing '}' after a block expression"}),
+            Error
+            );
+        // free node 
+    }
     INIT_SYMBOL_TABLE(node->as_block_expr.table);
 
 
@@ -781,7 +799,7 @@ ASTNode* parse_compound(Parser* parser) {
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_compound_statements, ASTNode);
     node->type = COMPOUND_STMT;
-    while(!consume(parser, TOK_EOF)) {
+    while(READ_TOKEN(parser).type != TOK_EOF) {
         APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
     }
     return node;
@@ -795,8 +813,11 @@ int main(int argc, char** argv) {
     load_file_into_memory(&(parser->lexer), "ctest.txt");
     tokenize(&(parser->lexer));
     ASTNode* root = parse_compound(parser);
-   // print_lexer(&parser->lexer);
-    print_node(root, 0);
+    //print_lexer(&parser->lexer);
+    for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
+        print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
+    }
+   // print_node(root, 0);
 
     return 0;
 }
