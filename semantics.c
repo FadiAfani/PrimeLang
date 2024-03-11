@@ -9,7 +9,7 @@ PrimeType* infer_binary_expr_type(SymbolTable* table, Vector* type_errors, ASTNo
     PrimeType* expr_type;
     ALLOCATE(expr_type, PrimeType, 1);
     Error err;
-    switch(node->as_bin_expr.op.type) {
+    switch(node->as_bin_expr.op->type) {
         case BT:
         case BTE:
         case LT:

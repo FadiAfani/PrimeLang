@@ -30,5 +30,6 @@ typedef struct Vector{
 }Vector;
 
 void init_vector(Vector* vector);
+void free_vector(Vector* vector);
 
 #endif

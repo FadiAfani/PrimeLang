@@ -42,18 +42,18 @@ struct TypeList {
 };
 
 typedef struct IdentifierExpr {
-    Token id_token;
+    Token* id_token;
     Vector* id_type;
 }IdentifierExpr;
 
 typedef struct BinExpr {
-    Token op;
+    Token* op;
     ASTNode* left;
     ASTNode* right;
 }BinExpr;
 
 typedef struct UnExpr {
-    Token op;
+    Token* op;
     ASTNode* operand;
 }UnExpr;
 
@@ -97,7 +97,7 @@ typedef struct RangeExpr {
 }RangeExpr;
 
 typedef struct FuncCallExpr {
-    Token func_id;
+    Token* func_id;
     Vector params;
 
 }FuncCallExpr;
@@ -131,8 +131,8 @@ struct ASTNode {
         UnExpr as_un_expr;
         ListExpr as_list_expr;
         FuncCallExpr as_func_call;
-        Token as_type;
-        Token as_literal_expr;
+        Token* as_type;
+        Token* as_literal_expr;
         Vector as_compound_statements;
         IfExpr as_if_expr;
         ForExpr as_for_expr;
@@ -142,9 +142,8 @@ struct ASTNode {
         TypeDecl as_type_decl;
         FuncDecl as_func_decl;
     };
-    Position node_pos;
-    size_t node_src_start;
-    size_t node_src_end;
+    Token* start_tok;
+    Token* end_tok;
     NodeType type;
 };
 

@@ -3,8 +3,9 @@
 #include "vector.h"
 #include "error.h"
 #include <stdbool.h>
+#include "malloc.h"
 
-#define READ_TOKEN(parser) (((Token*) (parser->lexer.tokens.arr))[parser->cursor])
+#define READ_TOKEN(parser) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor)))
 #define PEEK_AT(parser, i) (((Token*) (parser->lexer.tokens.arr))[parser->cursor + i])
 #define PEEK_NEXT(parser) (PEEK_AT(parser, 1))
 
@@ -48,15 +49,15 @@ void print_node(ASTNode* node, int depth) {
     }
     switch(node->type) {
         case LITERAL_EXPR:
-            printf("<literal>: %s\n", (char*) node->as_literal_expr.value.arr);
-            if (node->as_literal_expr.type == IDENTIFIER && node->as_id_literal.id_type != NULL) {
+            printf("<literal>: %s\n", (char*) node->as_literal_expr->value.arr);
+            if (node->as_literal_expr->type == IDENTIFIER && node->as_id_literal.id_type != NULL) {
                 for (size_t i = 0; i < node->as_id_literal.id_type->size; i++) {
                     print_node(INDEX_VECTOR((*node->as_id_literal.id_type), ASTNode*, i), depth + 1);
                 }
             }
             break;
         case BIN_EXPR:
-            printf("<binary-expr>: %s\n", CAST_VECTOR(node->as_bin_expr.op.value, char));
+            printf("<binary-expr>: %s\n", CAST_VECTOR(node->as_bin_expr.op->value, char));
             print_node(node->as_bin_expr.left, depth + 1);
             print_node(node->as_bin_expr.right, depth + 1);
             break;
@@ -120,7 +121,7 @@ void print_node(ASTNode* node, int depth) {
 
         case PREDEFINED_TYPE:
             printf("<predefined-type>:");
-            switch(node->as_type.type) {
+            switch(node->as_type->type) {
                 case UNIT:
                     printf("()\n");
                     break;
@@ -143,7 +144,7 @@ void print_node(ASTNode* node, int depth) {
                     printf("string\n");
                     break;
                 default:
-                    printf("%s", (char*) node->as_type.value.arr);
+                    printf("%s", (char*) node->as_type->value.arr);
                     break;
             }
             break;
@@ -156,8 +157,8 @@ void print_node(ASTNode* node, int depth) {
 }
 
 static bool consume(Parser* parser, TokenType token_type) {
-    Token tok = READ_TOKEN(parser);
-    if (tok.type == token_type) {
+    Token* tok = READ_TOKEN(parser);
+    if (tok->type == token_type) {
        parser->cursor++;
        return true;
     } 
@@ -176,85 +177,87 @@ void parse_type_annotation(Parser* parser, ASTNode* node) {
         APPEND((*vec), parse_type(parser), ASTNode*);
     }
 
-    node->as_id_literal.id_type = vec;
+    if (vec->size == 0) {
+        free_vector(vec);
+        node->as_id_literal.id_type = NULL;
+    } else {
+        node->as_id_literal.id_type = vec;
+    }
 }
 
 ASTNode* parse_identifier_literal(Parser* parser) {
 
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     consume(parser,IDENTIFIER);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
-    node->as_id_literal.id_token= tok;
+    node->start_tok = tok;
+    node->as_id_literal.id_token = tok;
+    node->as_id_literal.id_type = NULL;
     node->type = LITERAL_EXPR;
 
     if (consume(parser, COLON)) {
         parse_type_annotation(parser, node);
     }
 
-    
+    // get last token from the type vector
+    if (node->as_id_literal.id_type != NULL) {
+        node->end_tok = INDEX_VECTOR((*node->as_id_literal.id_type), ASTNode*, node->as_id_literal.id_type->size - 1)->end_tok;
+    } else {
+        node->end_tok = tok;
+    }
+
     return node;
 }
 
 ASTNode* parse_int_literal(Parser* parser) {
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (consume(parser, INT_LIT)) {
         ASTNode* node;
         ALLOCATE(node, ASTNode, 1);
         node->as_literal_expr = tok;
         node->type = LITERAL_EXPR;
+        node->start_tok = tok;
+        node->end_tok = tok;
         return node;
     } 
     
-    APPEND(parser->parsing_errors,
-        ((Error) {SYNTAX_ERROR,
-         tok.index, tok.value.size + tok.index,
-         tok.pos, "expected and int type"}),
-        Error
-        );
     return NULL;
 }
 
 ASTNode* parse_double_literal(Parser* parser) {
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (consume(parser, DOUBLE_LIT)) {
         ASTNode* node;
         ALLOCATE(node, ASTNode, 1);
         node->as_literal_expr = tok;
         node->type = LITERAL_EXPR;
+        node->start_tok = tok;
+        node->end_tok = tok;
         return node;
     } 
-    APPEND(parser->parsing_errors,
-        ((Error) {SYNTAX_ERROR,
-         tok.index, tok.value.size + tok.index,
-         tok.pos, "expected an int type"}),
-        Error
-        );
+
     return NULL;
 }
 
 ASTNode* parse_string_literal(Parser* parser) {
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (consume(parser, STRING_LIT)) {
         ASTNode* node;
         ALLOCATE(node, ASTNode, 1);
         node->as_literal_expr = tok;
         node->type = LITERAL_EXPR;
+        node->start_tok = tok;
+        node->end_tok = tok;
         return node;
     } 
 
-    APPEND(parser->parsing_errors,
-        ((Error) {SYNTAX_ERROR,
-         tok.index, tok.value.size + tok.index,
-         tok.pos, "expected a string type"}),
-        Error
-        );
     return NULL;
 }
 
 ASTNode* parse_literal(Parser* parser) {
-    Token tok = READ_TOKEN(parser);
-    switch(tok.type) {
+    Token* tok = READ_TOKEN(parser);
+    switch(tok->type) {
         case IDENTIFIER:
             return parse_identifier_literal(parser);
         case INT_LIT:
@@ -272,9 +275,10 @@ ASTNode* parse_literal(Parser* parser) {
 // <factor> := <literal> ( [ * | \ ] <literal> )*
 ASTNode* parse_factor(Parser* parser) {
     ASTNode* node = parse_primary(parser);
+    if (node == NULL) return NULL;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
-        Token tok = READ_TOKEN(parser);
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* tok = READ_TOKEN(parser);
         if (consume(parser, MULT) || consume(parser, DIV)) {
             ASTNode* new_node;
             ALLOCATE(new_node, ASTNode, 1);
@@ -282,24 +286,46 @@ ASTNode* parse_factor(Parser* parser) {
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_literal(parser);
             new_node->type = BIN_EXPR;
+
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            if (new_node->as_bin_expr.right == NULL) {
+                new_node->end_tok = tok;
+                print_token(*node->as_bin_expr.op);
+                APPEND(
+                    parser->parsing_errors,
+                    ((Error) {SYNTAX_ERROR,
+                    node->start_tok->index, new_node->end_tok->index + new_node->end_tok->value.size,
+                    node->start_tok->pos, 
+                    tok->type == MULT ? "expected an expression after '*'" :"expected an expression after '/'" }),
+                    Error
+                );
+                    
+            } else {
+                new_node->end_tok = new_node->as_bin_expr.right->end_tok;
+            }
+
             node = new_node;
         } else {break;}
     }
+
     return node;
 
 }
 
 ASTNode* parse_term(Parser* parser) {
     ASTNode* node = parse_factor(parser);
+    if (node == NULL) return NULL;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
-        Token tok = READ_TOKEN(parser);
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* tok = READ_TOKEN(parser);
         if (consume(parser, PLUS) || consume(parser, MINUS)) {
             ASTNode* new_node;
             ALLOCATE(new_node, ASTNode, 1);
             new_node->as_bin_expr.op = tok;
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_factor(parser);
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            new_node->end_tok = new_node->as_bin_expr.right->end_tok;
             new_node->type = BIN_EXPR;
             node = new_node;
         } else {break;}
@@ -309,15 +335,18 @@ ASTNode* parse_term(Parser* parser) {
 
 ASTNode* parse_and(Parser* parser) {
     ASTNode* node = parse_term(parser);
+    if (node == NULL) return NULL;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
-        Token tok = READ_TOKEN(parser);
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* tok = READ_TOKEN(parser);
         if (consume(parser, AND)) {
             ASTNode* new_node;
             ALLOCATE(new_node, ASTNode, 1);
             new_node->as_bin_expr.op = tok;
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_term(parser);
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            new_node->end_tok = new_node->as_bin_expr.right->end_tok;
             new_node->type = BIN_EXPR;
             node = new_node;
         } else {break;}
@@ -327,15 +356,18 @@ ASTNode* parse_and(Parser* parser) {
 
 ASTNode* parse_or(Parser* parser) {
     ASTNode* node = parse_and(parser);
+    if (node == NULL) return NULL;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
-        Token tok = READ_TOKEN(parser);
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* tok = READ_TOKEN(parser);
         if (consume(parser, OR)) {
             ASTNode* new_node;
             ALLOCATE(new_node, ASTNode, 1);
             new_node->as_bin_expr.op = tok;
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_and(parser);
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            new_node->end_tok = new_node->as_bin_expr.right->end_tok;
             new_node->type = BIN_EXPR;
             node = new_node;
         } else {break;}
@@ -345,7 +377,7 @@ ASTNode* parse_or(Parser* parser) {
 
 ASTNode* parse_list(Parser* parser) {
 
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     consume(parser, LBRAC);
 
     ASTNode* node;
@@ -355,8 +387,8 @@ ASTNode* parse_list(Parser* parser) {
     APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
     node->type = LIST_EXPR;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
-        Token tok = READ_TOKEN(parser);
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* tok = READ_TOKEN(parser);
         if (consume(parser, COMMA)) {
             APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
         } else {
@@ -364,14 +396,23 @@ ASTNode* parse_list(Parser* parser) {
         }
     }
 
-    Token brac = READ_TOKEN(parser);
+    // store starting token and ending token
+
+    node->start_tok = tok;
+    if (node->as_list_expr.items.size > 0) {
+        node->end_tok = INDEX_VECTOR(node->as_list_expr.items, ASTNode*, node->as_list_expr.items.size - 1)->end_tok;
+    } else {
+        node->end_tok = tok;
+    }
+
+    Token* brac = READ_TOKEN(parser);
     if (!consume(parser, RBRAC)) {
         // report error and free node memory
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok.index, tok.value.size + tok.index,
-            tok.pos, "unclosed delimiter, missing ']' at the end of the list literal"}),
+            node->start_tok->index, node->end_tok->index + node->end_tok->value.size - 1,
+            tok->pos, "unclosed delimiter, missing ']' at the end of the list literal"}),
             Error
             );
 
@@ -384,12 +425,12 @@ ASTNode* parse_list(Parser* parser) {
     return node;
 
 }
-
+// TODO: add start_tok and end_tok to the node
 ASTNode* parse_tuple(Parser* parser) {
 
     consume(parser, LPAREN);
     ASTNode* expr = parse_expr(parser);
-    if (READ_TOKEN(parser).type == RPAREN) {
+    if (READ_TOKEN(parser)->type == RPAREN) {
         consume(parser, RPAREN);
         return expr;
     }
@@ -401,7 +442,7 @@ ASTNode* parse_tuple(Parser* parser) {
     APPEND(node->as_list_expr.items, expr, ASTNode*);
     node->type = TUPLE_EXPR;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
         if (consume(parser, COMMA)) {
             APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
         } else {
@@ -409,14 +450,14 @@ ASTNode* parse_tuple(Parser* parser) {
         }
     }
 
-    Token brac = READ_TOKEN(parser);
+    Token* brac = READ_TOKEN(parser);
     if (!consume(parser, RPAREN)) {
         // report error and free node memory
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            brac.index, brac.value.size + brac.index,
-            brac.pos, "missing ')' symbol"}),
+            brac->index, brac->value.size + brac->index,
+            brac->pos, "missing ')' symbol"}),
             Error
             );
 
@@ -434,13 +475,13 @@ ASTNode* parse_tuple(Parser* parser) {
 ASTNode* parse_func_call(Parser* parser) {
     ASTNode* id = parse_identifier_literal(parser);
 
-    Token paren = READ_TOKEN(parser);
+    Token* paren = READ_TOKEN(parser);
     if (!consume(parser, LPAREN)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            paren.index, paren.value.size + paren.index,
-            paren.pos, "missing '(' symbol"}),
+            paren->index, paren->value.size + paren->index,
+            paren->pos, "missing '(' symbol"}),
             Error
             );
         return NULL;
@@ -452,8 +493,8 @@ ASTNode* parse_func_call(Parser* parser) {
     APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
     node->type = FUNC_CALL_EXPR;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
-        Token tok = READ_TOKEN(parser);
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* tok = READ_TOKEN(parser);
         if (consume(parser, COMMA)) {
             APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
         } else {
@@ -466,8 +507,8 @@ ASTNode* parse_func_call(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            paren.index, paren.value.size + paren.index,
-            paren.pos, "missing ')' symbol"}),
+            paren->index, paren->value.size + paren->index,
+            paren->pos, "missing ')' symbol"}),
             Error
             );
         free_ast_node(node);
@@ -480,13 +521,13 @@ ASTNode* parse_func_call(Parser* parser) {
 
 ASTNode* parse_list_index(Parser* parser) {
     ASTNode* id = parse_identifier_literal(parser);
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (!consume(parser, LBRAC)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok.index, tok.value.size + tok.index,
-            tok.pos, "missing ')' symbol"}),
+            tok->index, tok->value.size + tok->index,
+            tok->pos, "missing ')' symbol"}),
             Error
             );
         free_ast_node(id);
@@ -498,8 +539,8 @@ ASTNode* parse_list_index(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok.index, tok.value.size + tok.index,
-            tok.pos, "missing ')' symbol"}),
+            tok->index, tok->value.size + tok->index,
+            tok->pos, "missing ')' symbol"}),
             Error
             );
         free_ast_node(id);
@@ -516,8 +557,8 @@ ASTNode* parse_list_index(Parser* parser) {
 }
 
 ASTNode* parse_primary(Parser* parser) {
-    Token tok = READ_TOKEN(parser);
-    switch(READ_TOKEN(parser).type) {
+    Token* tok = READ_TOKEN(parser);
+    switch(READ_TOKEN(parser)->type) {
         case IDENTIFIER:
             if (PEEK_NEXT(parser).type == LPAREN) {
                 return parse_func_call(parser);
@@ -543,7 +584,7 @@ ASTNode* parse_primary(Parser* parser) {
 
 
 ASTNode* parse_block(Parser* parser) {
-    Token lcurly = READ_TOKEN(parser);
+    Token* lcurly = READ_TOKEN(parser);
     consume(parser, LCURLY);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
@@ -551,7 +592,7 @@ ASTNode* parse_block(Parser* parser) {
     node->type = BLOCK_EXPR;
     bool unclosed = true;
 
-    while(READ_TOKEN(parser).type != TOK_EOF) {
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
         ASTNode* stmt = parse_statement(parser);
         APPEND(node->as_compound_statements, stmt, ASTNode*);
         if (consume(parser, RCURLY)) {
@@ -559,13 +600,13 @@ ASTNode* parse_block(Parser* parser) {
             break;
         }
     }
-    Token eof_tok = READ_TOKEN(parser);
-    printf("%d\n", eof_tok.type);
+    Token* eof_tok = READ_TOKEN(parser);
+    printf("%d\n", eof_tok->type);
     if (unclosed) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            lcurly.index, lcurly.index + 1,
-            lcurly.pos, "unclosed delimiter, missing '}' after a block expression"}),
+            lcurly->index, lcurly->index + 1,
+            lcurly->pos, "unclosed delimiter, missing '}' after a block expression"}),
             Error
             );
         // free node 
@@ -585,13 +626,13 @@ ASTNode* parse_elif(Parser* parser) {
     node->as_if_expr.cond = parse_expr(parser);
     node->type = IF_EXPR;
 
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (consume(parser, THEN)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok.index, tok.value.size + tok.index,
-            tok.pos, "missing 'then' after if condition"}),
+            tok->index, tok->value.size + tok->index,
+            tok->pos, "missing 'then' after if condition"}),
             Error
             );
     }
@@ -607,19 +648,19 @@ ASTNode* parse_if(Parser* parser) {
     node->as_if_expr.cond = parse_expr(parser);
     node->type = IF_EXPR;
 
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (consume(parser, THEN)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok.index, tok.value.size + tok.index,
-            tok.pos, "missing 'then' after if condition"}),
+            tok->index, tok->value.size + tok->index,
+            tok->pos, "missing 'then' after if condition"}),
             Error
             );
     }
     node->as_if_expr.expr = parse_expr(parser);
     node->as_if_expr.else_expr = NULL;
-    while(READ_TOKEN(parser).type == ELIF) {
+    while(READ_TOKEN(parser)->type == ELIF) {
         APPEND(node->as_if_expr.else_ifs, parse_elif(parser), ASTNode*);
     }
 
@@ -632,7 +673,7 @@ ASTNode* parse_if(Parser* parser) {
 
 ASTNode* parse_range(Parser* parser) {
     ASTNode* left = parse_or(parser);
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     if (!consume(parser, RANGE)) return left;
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
@@ -641,13 +682,15 @@ ASTNode* parse_range(Parser* parser) {
     node->type = BIN_EXPR;
     node->as_bin_expr.op = tok;
 
+    node->start_tok = node->as_bin_expr.left->start_tok;
+    node->end_tok = node->as_bin_expr.right->end_tok;
     return node;
 }
 
 ASTNode* parse_type(Parser* parser) {
-    Token tok = READ_TOKEN(parser);
+    Token* tok = READ_TOKEN(parser);
     ASTNode* node;
-    switch (tok.type) {
+    switch (tok->type) {
         case TYPE_INT:
         case TYPE_DOUBLE:
         case TYPE_STRING:
@@ -717,14 +760,14 @@ ASTNode* parse_type_decl(Parser* parser) {
 }
 
 void parse_func_param(Parser* parser, ASTNode* node) {
-    if (READ_TOKEN(parser).type == LPAREN) {
+    if (READ_TOKEN(parser)->type == LPAREN) {
         consume(parser, LPAREN);
         APPEND(node->as_func_decl.parameters, parse_identifier_literal(parser), ASTNode*);
         if (!consume(parser, RPAREN)) {
             //report error and free memory
             return;
         }
-    } else if (READ_TOKEN(parser).type == UNIT) {
+    } else if (READ_TOKEN(parser)->type == UNIT) {
         APPEND(node->as_func_decl.parameters, parse_type(parser), ASTNode*);
     } else {
         // report error and free memory
@@ -758,11 +801,13 @@ ASTNode* parse_func_decl(Parser* parser) {
 
 ASTNode* parse_assignment(Parser* parser) {
     ASTNode* left = parse_range(parser);
-    Token eq = READ_TOKEN(parser);
+    if (left == NULL) return NULL;
+    Token* eq = READ_TOKEN(parser);
     if (!consume(parser, EQ)) {
         return left;
     }
     ASTNode* right = parse_range(parser);
+    if (right == NULL) return NULL;
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     node->as_bin_expr.op = eq;
@@ -770,6 +815,8 @@ ASTNode* parse_assignment(Parser* parser) {
     node->as_bin_expr.right = right;
     node->type = BIN_EXPR;
 
+    node->start_tok = node->as_bin_expr.left->start_tok;
+    node->end_tok = node->as_bin_expr.right->end_tok;
     return node;
 }
 
@@ -781,12 +828,12 @@ ASTNode* parse_expr(Parser* parser) {
 
 
 ASTNode* parse_statement(Parser* parser) {
-    switch(READ_TOKEN(parser).type) {
+    switch(READ_TOKEN(parser)->type) {
         case KEYWORD_TYPE:
             return parse_type_decl(parser);
         
     }
-    if (READ_TOKEN(parser).type == IDENTIFIER && PEEK_NEXT(parser).type == DOUBLE_COLON) {
+    if (READ_TOKEN(parser)->type == IDENTIFIER && PEEK_NEXT(parser).type == DOUBLE_COLON) {
         return parse_func_decl(parser);
     }
     ASTNode* node = parse_expr(parser);
@@ -799,7 +846,7 @@ ASTNode* parse_compound(Parser* parser) {
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_compound_statements, ASTNode);
     node->type = COMPOUND_STMT;
-    while(READ_TOKEN(parser).type != TOK_EOF) {
+    while(READ_TOKEN(parser)->type != TOK_EOF) {
         APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
     }
     return node;
@@ -817,7 +864,7 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
         print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
     }
-   // print_node(root, 0);
+    print_node(root, 0);
 
     return 0;
 }
