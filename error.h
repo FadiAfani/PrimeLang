@@ -15,6 +15,7 @@ typedef struct Error {
     size_t src_start_pos;
     size_t src_end_pos;
     Position pos;
+    int err_len;
     char* err_msg;
 }Error;
 

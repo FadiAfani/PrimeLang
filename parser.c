@@ -267,7 +267,18 @@ ASTNode* parse_literal(Parser* parser) {
         case STRING_LIT: 
             return parse_string_literal(parser);
         case BOOL_LIT:
-        default: break;
+        case TOK_EOF: return NULL;
+        default: 
+            parser->cursor++;
+            APPEND(parser->parsing_errors,
+                ((Error) {SYNTAX_ERROR,
+                tok->index - tok->pos.col + 1, 
+                tok->value.size + tok->index,
+                tok->pos, 
+                tok->value.size, 
+                "unexpected symbol"}),
+                Error
+            );
     }
     return NULL;
 }
@@ -290,15 +301,20 @@ ASTNode* parse_factor(Parser* parser) {
             new_node->start_tok = new_node->as_bin_expr.left->start_tok;
             if (new_node->as_bin_expr.right == NULL) {
                 new_node->end_tok = tok;
-                print_token(*node->as_bin_expr.op);
                 APPEND(
                     parser->parsing_errors,
                     ((Error) {SYNTAX_ERROR,
-                    node->start_tok->index, new_node->end_tok->index + new_node->end_tok->value.size,
+                    node->start_tok->index - node->start_tok->pos.col + 1, 
+                    new_node->end_tok->index + new_node->end_tok->value.size,
                     node->start_tok->pos, 
+                    tok->index - node->start_tok->index + 1,
                     tok->type == MULT ? "expected an expression after '*'" :"expected an expression after '/'" }),
                     Error
                 );
+
+                // free and return
+                return NULL;
+
                     
             } else {
                 new_node->end_tok = new_node->as_bin_expr.right->end_tok;
@@ -324,9 +340,29 @@ ASTNode* parse_term(Parser* parser) {
             new_node->as_bin_expr.op = tok;
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_factor(parser);
-            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
-            new_node->end_tok = new_node->as_bin_expr.right->end_tok;
             new_node->type = BIN_EXPR;
+
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            if (new_node->as_bin_expr.right == NULL) {
+                new_node->end_tok = tok;
+                APPEND(
+                    parser->parsing_errors,
+                    ((Error) {SYNTAX_ERROR,
+                    node->start_tok->index - node->start_tok->pos.col + 1, 
+                    new_node->end_tok->index + new_node->end_tok->value.size,
+                    node->start_tok->pos, 
+                    tok->index - node->start_tok->index + 1,
+                    tok->type == PLUS ? "expected an expression after '+'" :"expected an expression after '-'" }),
+                    Error
+                );
+
+                // free and return
+                return NULL;
+                    
+            } else {
+                new_node->end_tok = new_node->as_bin_expr.right->end_tok;
+            }
+
             node = new_node;
         } else {break;}
     }
@@ -345,9 +381,28 @@ ASTNode* parse_and(Parser* parser) {
             new_node->as_bin_expr.op = tok;
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_term(parser);
-            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
-            new_node->end_tok = new_node->as_bin_expr.right->end_tok;
             new_node->type = BIN_EXPR;
+
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            if (new_node->as_bin_expr.right == NULL) {
+                new_node->end_tok = tok;
+                APPEND(
+                    parser->parsing_errors,
+                    ((Error) {SYNTAX_ERROR,
+                    node->start_tok->index - node->start_tok->pos.col + 1, 
+                    new_node->end_tok->index + new_node->end_tok->value.size,
+                    node->start_tok->pos, 
+                    tok->index - node->start_tok->index + 1,
+                    "expected an expression after '&&'"}),
+                    Error
+                );
+                // free and return
+                return NULL;
+                    
+            } else {
+                new_node->end_tok = new_node->as_bin_expr.right->end_tok;
+            }
+
             node = new_node;
         } else {break;}
     }
@@ -366,9 +421,28 @@ ASTNode* parse_or(Parser* parser) {
             new_node->as_bin_expr.op = tok;
             new_node->as_bin_expr.left = node;
             new_node->as_bin_expr.right = parse_and(parser);
-            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
-            new_node->end_tok = new_node->as_bin_expr.right->end_tok;
             new_node->type = BIN_EXPR;
+
+            new_node->start_tok = new_node->as_bin_expr.left->start_tok;
+            if (new_node->as_bin_expr.right == NULL) {
+                new_node->end_tok = tok;
+                APPEND(
+                    parser->parsing_errors,
+                    ((Error) {SYNTAX_ERROR,
+                    node->start_tok->index - node->start_tok->pos.col + 1, 
+                    new_node->end_tok->index + new_node->end_tok->value.size,
+                    node->start_tok->pos, 
+                    tok->index - node->start_tok->index + 1,
+                    "expected an expression after '||'"}),
+                    Error
+                );
+                // free and return
+                return NULL;
+                    
+            } else {
+                new_node->end_tok = new_node->as_bin_expr.right->end_tok;
+            }
+
             node = new_node;
         } else {break;}
     }
@@ -411,8 +485,9 @@ ASTNode* parse_list(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            node->start_tok->index, node->end_tok->index + node->end_tok->value.size - 1,
-            tok->pos, "unclosed delimiter, missing ']' at the end of the list literal"}),
+            node->start_tok->index - node->start_tok->pos.col + 1, node->end_tok->index + node->end_tok->value.size,
+            tok->pos, node->start_tok->value.size,
+            "unclosed delimiter, missing ']' at the end of the list literal"}),
             Error
             );
 
@@ -457,7 +532,7 @@ ASTNode* parse_tuple(Parser* parser) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             brac->index, brac->value.size + brac->index,
-            brac->pos, "missing ')' symbol"}),
+            brac->pos, brac->value.size, "missing ')' symbol"}),
             Error
             );
 
@@ -481,7 +556,7 @@ ASTNode* parse_func_call(Parser* parser) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             paren->index, paren->value.size + paren->index,
-            paren->pos, "missing '(' symbol"}),
+            paren->pos, paren->value.size, "missing '(' symbol"}),
             Error
             );
         return NULL;
@@ -508,7 +583,7 @@ ASTNode* parse_func_call(Parser* parser) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             paren->index, paren->value.size + paren->index,
-            paren->pos, "missing ')' symbol"}),
+            paren->pos, paren->value.size, "missing ')' symbol"}),
             Error
             );
         free_ast_node(node);
@@ -527,7 +602,7 @@ ASTNode* parse_list_index(Parser* parser) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             tok->index, tok->value.size + tok->index,
-            tok->pos, "missing ')' symbol"}),
+            tok->pos, tok->value.size, "missing ')' symbol"}),
             Error
             );
         free_ast_node(id);
@@ -540,7 +615,7 @@ ASTNode* parse_list_index(Parser* parser) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             tok->index, tok->value.size + tok->index,
-            tok->pos, "missing ')' symbol"}),
+            tok->pos, tok->value.size, "missing ')' symbol"}),
             Error
             );
         free_ast_node(id);
@@ -572,11 +647,20 @@ ASTNode* parse_primary(Parser* parser) {
         case LCURLY: return parse_block(parser);
         case IF_EXPR: return parse_if(parser);
         case BLOCK_EXPR: return parse_block(parser);
+        case TOK_EOF: break;
 
-        default:
+        default: 
             parser->cursor++;
-            return NULL;
-
+            APPEND(parser->parsing_errors,
+                ((Error) {SYNTAX_ERROR,
+                tok->index - tok->pos.col + 1, 
+                tok->value.size + tok->index,
+                tok->pos, 
+                tok->value.size, 
+                "unexpected symbol"}),
+                Error
+            );
+            break;
     }
     return NULL;
 
@@ -601,12 +685,14 @@ ASTNode* parse_block(Parser* parser) {
         }
     }
     Token* eof_tok = READ_TOKEN(parser);
-    printf("%d\n", eof_tok->type);
     if (unclosed) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            lcurly->index, lcurly->index + 1,
-            lcurly->pos, "unclosed delimiter, missing '}' after a block expression"}),
+            lcurly->index - lcurly->pos.col + 1, 
+            lcurly->index + 1,
+            lcurly->pos, 
+            lcurly->value.size, 
+            "unclosed delimiter, missing '}' after a block expression"}),
             Error
             );
         // free node 
@@ -632,7 +718,7 @@ ASTNode* parse_elif(Parser* parser) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             tok->index, tok->value.size + tok->index,
-            tok->pos, "missing 'then' after if condition"}),
+            tok->pos, tok->value.size, "missing 'then' after if condition"}),
             Error
             );
     }
@@ -649,14 +735,18 @@ ASTNode* parse_if(Parser* parser) {
     node->type = IF_EXPR;
 
     Token* tok = READ_TOKEN(parser);
-    if (consume(parser, THEN)) {
+    if (!consume(parser, THEN)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok->index, tok->value.size + tok->index,
-            tok->pos, "missing 'then' after if condition"}),
+            tok->index - tok->pos.col + 1, 
+            tok->value.size + tok->index,
+            tok->pos, tok->value.size, 
+            "missing 'then' after an if condition"}),
             Error
             );
+        //TODO: free node
+        return NULL;
     }
     node->as_if_expr.expr = parse_expr(parser);
     node->as_if_expr.else_expr = NULL;
@@ -681,8 +771,65 @@ ASTNode* parse_range(Parser* parser) {
     node->as_bin_expr.right = parse_or(parser);
     node->type = BIN_EXPR;
     node->as_bin_expr.op = tok;
-
     node->start_tok = node->as_bin_expr.left->start_tok;
+
+    if (node->as_bin_expr.right == NULL) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            left->start_tok->index - left->start_tok->pos.col + 1, 
+            tok->value.size + tok->index,
+            tok->pos, 
+            tok->value.size, 
+            "expected an expression after '..'"}),
+            Error
+        );
+
+        //TODO: free node
+        node->end_tok = node->start_tok;
+        return NULL;
+    }
+
+    node->end_tok = node->as_bin_expr.right->end_tok;
+    return node;
+}
+
+ASTNode* parse_equality(Parser* parser) {
+    ASTNode* left = parse_range(parser);
+
+    if (left == NULL) {
+        //TODO: free memory
+        return NULL;
+    }
+
+    Token* tok = READ_TOKEN(parser);
+    if (!consume(parser, DEQ)) return left;
+
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->as_bin_expr.left = left;
+    node->as_bin_expr.op = tok;
+    node->as_bin_expr.right = parse_range(parser);
+    node->type= BIN_EXPR;
+    node->start_tok = node->as_bin_expr.left->start_tok;
+
+    if (node->as_bin_expr.right == NULL) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            left->start_tok->index - left->start_tok->pos.col + 1, 
+            tok->value.size + tok->index,
+            tok->pos, 
+            tok->value.size, 
+            "expected an expression after '=='"}),
+            Error
+        );
+
+        //TODO: free node
+        node->end_tok = node->start_tok;
+        return NULL;
+    }
+
     node->end_tok = node->as_bin_expr.right->end_tok;
     return node;
 }
@@ -799,14 +946,25 @@ ASTNode* parse_func_decl(Parser* parser) {
 
 }
 
+ASTNode* parse_block_based_expr(Parser* parser) {
+    Token* tok = READ_TOKEN(parser);
+    switch(tok->type) {
+        case IF: return parse_if(parser);
+        case LCURLY: return parse_block(parser);
+        case TOK_EOF: break;
+        default: return parse_equality(parser);
+    }
+    return NULL;
+}
+
 ASTNode* parse_assignment(Parser* parser) {
-    ASTNode* left = parse_range(parser);
+    ASTNode* left = parse_block_based_expr(parser);
     if (left == NULL) return NULL;
     Token* eq = READ_TOKEN(parser);
     if (!consume(parser, EQ)) {
         return left;
     }
-    ASTNode* right = parse_range(parser);
+    ASTNode* right = parse_block_based_expr(parser);
     if (right == NULL) return NULL;
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
@@ -819,6 +977,7 @@ ASTNode* parse_assignment(Parser* parser) {
     node->end_tok = node->as_bin_expr.right->end_tok;
     return node;
 }
+
 
 
 ASTNode* parse_expr(Parser* parser) {
@@ -864,7 +1023,7 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
         print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
     }
-    print_node(root, 0);
+    //print_node(root, 0);
 
     return 0;
 }
