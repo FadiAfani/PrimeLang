@@ -89,7 +89,7 @@ static void tokenize_id(Lexer* lexer, Token* tok) {
 
     ALLOCATE(tok->value.arr, char, INIT_VECTOR_CAP);
     char c;
-    while ((c = READ_CHAR(lexer)) != '\0' && isalpha(c)) {
+    while ((c = READ_CHAR(lexer)) != '\0' && isalpha(c) || isdigit(c) || c == '_') {
         lexer->pos.col++;
         lexer->cursor++;
         APPEND(tok->value, c, char);
@@ -168,8 +168,8 @@ void tokenize(Lexer* lexer) {
                     tok.value = (Vector) {2, 2, "+="};
                 } else {
                     tok.type = PLUS;
+                    tok.value = (Vector) {1, 1, "+"};
                 } 
-                tok.value = (Vector) {1, 1, "+"};
                 APPEND(lexer->tokens, tok, Token);
                 break;
             case '-':
@@ -217,6 +217,34 @@ void tokenize(Lexer* lexer) {
                 } else {
                     tok.type = DIV;
                     tok.value = (Vector) {1, 1, "/"};
+                } 
+                APPEND(lexer->tokens, tok, Token);
+                break;
+            case '>':
+                lexer->cursor++;
+                lexer->pos.col++;
+                if (READ_CHAR(lexer) == '=') {
+                    tok.type = BTE;
+                    lexer->cursor++;
+                    lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, ">="};
+                } else {
+                    tok.type = BT;
+                    tok.value = (Vector) {1, 1, "<"};
+                } 
+                APPEND(lexer->tokens, tok, Token);
+                break;
+            case '<':
+                lexer->cursor++;
+                lexer->pos.col++;
+                if (READ_CHAR(lexer) == '=') {
+                    tok.type = BTE;
+                    lexer->cursor++;
+                    lexer->pos.col++;
+                    tok.value = (Vector) {2, 2, "<="};
+                } else {
+                    tok.type = BT;
+                    tok.value = (Vector) {1, 1, "<"};
                 } 
                 APPEND(lexer->tokens, tok, Token);
                 break;

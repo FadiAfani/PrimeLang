@@ -36,7 +36,7 @@ void free_ast_node(ASTNode* node) {
             break;
         default:
             printf("free is not implemented for this node type\n");
-            exit(EXIT_FAILURE);
+            return;
     }
     free(node);
 }
@@ -168,6 +168,19 @@ static bool consume(Parser* parser, TokenType token_type) {
 
 void parse_type_annotation(Parser* parser, ASTNode* node) {
     ASTNode* fst_type = parse_type(parser);
+    if (fst_type == NULL) {
+        APPEND(
+            parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            node->end_tok->pos, 
+            node->end_tok->value.size,
+            "expected a type" }),
+            Error
+        );
+        return;
+
+    }
     Vector* vec;
     ALLOCATE(vec, Vector, 1);
     INIT_VECTOR((*vec), ASTNode*);
@@ -196,7 +209,9 @@ ASTNode* parse_identifier_literal(Parser* parser) {
     node->as_id_literal.id_type = NULL;
     node->type = LITERAL_EXPR;
 
+    Token* colon = READ_TOKEN(parser);
     if (consume(parser, COLON)) {
+        node->end_tok = colon;
         parse_type_annotation(parser, node);
     }
 
@@ -266,19 +281,19 @@ ASTNode* parse_literal(Parser* parser) {
             return parse_double_literal(parser);
         case STRING_LIT: 
             return parse_string_literal(parser);
-        case BOOL_LIT:
-        case TOK_EOF: return NULL;
+        case BOOL_LIT: break;
+        case TOK_EOF: break;
         default: 
             parser->cursor++;
             APPEND(parser->parsing_errors,
                 ((Error) {SYNTAX_ERROR,
                 tok->index - tok->pos.col + 1, 
-                tok->value.size + tok->index,
                 tok->pos, 
                 tok->value.size, 
                 "unexpected symbol"}),
                 Error
             );
+            break;
     }
     return NULL;
 }
@@ -305,14 +320,17 @@ ASTNode* parse_factor(Parser* parser) {
                     parser->parsing_errors,
                     ((Error) {SYNTAX_ERROR,
                     node->start_tok->index - node->start_tok->pos.col + 1, 
-                    new_node->end_tok->index + new_node->end_tok->value.size,
                     node->start_tok->pos, 
                     tok->index - node->start_tok->index + 1,
                     tok->type == MULT ? "expected an expression after '*'" :"expected an expression after '/'" }),
                     Error
                 );
 
-                // free and return
+                /**
+                 * free and return
+                 * freeing new_node should also free its child nodes
+                */
+                free_ast_node(new_node);
                 return NULL;
 
                     
@@ -349,7 +367,6 @@ ASTNode* parse_term(Parser* parser) {
                     parser->parsing_errors,
                     ((Error) {SYNTAX_ERROR,
                     node->start_tok->index - node->start_tok->pos.col + 1, 
-                    new_node->end_tok->index + new_node->end_tok->value.size,
                     node->start_tok->pos, 
                     tok->index - node->start_tok->index + 1,
                     tok->type == PLUS ? "expected an expression after '+'" :"expected an expression after '-'" }),
@@ -357,6 +374,7 @@ ASTNode* parse_term(Parser* parser) {
                 );
 
                 // free and return
+                free_ast_node(new_node);
                 return NULL;
                     
             } else {
@@ -390,13 +408,13 @@ ASTNode* parse_and(Parser* parser) {
                     parser->parsing_errors,
                     ((Error) {SYNTAX_ERROR,
                     node->start_tok->index - node->start_tok->pos.col + 1, 
-                    new_node->end_tok->index + new_node->end_tok->value.size,
                     node->start_tok->pos, 
                     tok->index - node->start_tok->index + 1,
                     "expected an expression after '&&'"}),
                     Error
                 );
                 // free and return
+                free_ast_node(new_node);
                 return NULL;
                     
             } else {
@@ -430,13 +448,13 @@ ASTNode* parse_or(Parser* parser) {
                     parser->parsing_errors,
                     ((Error) {SYNTAX_ERROR,
                     node->start_tok->index - node->start_tok->pos.col + 1, 
-                    new_node->end_tok->index + new_node->end_tok->value.size,
                     node->start_tok->pos, 
                     tok->index - node->start_tok->index + 1,
                     "expected an expression after '||'"}),
                     Error
                 );
                 // free and return
+                free_ast_node(new_node);
                 return NULL;
                     
             } else {
@@ -464,7 +482,23 @@ ASTNode* parse_list(Parser* parser) {
     while(READ_TOKEN(parser)->type != TOK_EOF) {
         Token* tok = READ_TOKEN(parser);
         if (consume(parser, COMMA)) {
-            APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
+            ASTNode* item = parse_expr(parser);
+            if (item != NULL) {
+                APPEND(node->as_list_expr.items, parse_expr(parser), ASTNode*);
+            } else {
+                APPEND(parser->parsing_errors,
+                    ((Error) {SYNTAX_ERROR,
+                    tok->index - tok->pos.col + 1, 
+                    tok->pos, 
+                    tok->value.size,
+                    "expected an expression after ','"}),
+                    Error
+                    );
+
+                // free node and return
+                free_ast_node(node);
+                return NULL;
+            }
         } else {
             break;
         }
@@ -485,15 +519,14 @@ ASTNode* parse_list(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            node->start_tok->index - node->start_tok->pos.col + 1, node->end_tok->index + node->end_tok->value.size,
-            tok->pos, node->start_tok->value.size,
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            tok->pos, 
+            node->start_tok->value.size,
             "unclosed delimiter, missing ']' at the end of the list literal"}),
             Error
             );
 
         free_ast_node(node);
-
-
         return NULL;
     }
 
@@ -531,8 +564,9 @@ ASTNode* parse_tuple(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            brac->index, brac->value.size + brac->index,
-            brac->pos, brac->value.size, "missing ')' symbol"}),
+            brac->index, 
+            brac->pos, 
+            brac->value.size, "missing ')' symbol"}),
             Error
             );
 
@@ -550,40 +584,64 @@ ASTNode* parse_tuple(Parser* parser) {
 ASTNode* parse_func_call(Parser* parser) {
     ASTNode* id = parse_identifier_literal(parser);
 
-    Token* paren = READ_TOKEN(parser);
+    Token* lparen = READ_TOKEN(parser);
     if (!consume(parser, LPAREN)) {
-
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            paren->index, paren->value.size + paren->index,
-            paren->pos, paren->value.size, "missing '(' symbol"}),
-            Error
-            );
+        free_ast_node(id);
         return NULL;
     }
 
     ASTNode* node = NULL;
     ALLOCATE(node, ASTNode, 1);
-    INIT_VECTOR(node->as_func_call.params, ASTNode*);
-    APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
+    node->start_tok = id->start_tok;
+    node->end_tok = node->start_tok;
     node->type = FUNC_CALL_EXPR;
+    INIT_VECTOR(node->as_func_call.params, ASTNode*);
+    ASTNode* arg = parse_expr(parser);
+    if (arg == NULL) {
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            lparen->pos, 
+            lparen->value.size, 
+            "expected an expression"}),
+            Error
+            );
+        free_ast_node(node);
+        return NULL;
+    }
+    APPEND(node->as_func_call.params, arg, ASTNode*);
 
     while(READ_TOKEN(parser)->type != TOK_EOF) {
         Token* tok = READ_TOKEN(parser);
         if (consume(parser, COMMA)) {
-            APPEND(node->as_func_call.params, parse_expr(parser), ASTNode*);
+            arg = parse_expr(parser);
+            if (arg == NULL) {
+                APPEND(parser->parsing_errors,
+                    ((Error) {SYNTAX_ERROR,
+                    node->start_tok->index - node->start_tok->pos.col + 1, 
+                    tok->pos, 
+                    tok->value.size, 
+                    "expected an expression after ','"}),
+                    Error
+                );
+                free_ast_node(node);
+                return NULL;
+            }
+            APPEND(node->as_func_call.params, arg, ASTNode*);
         } else {
             break;
         }
     }
 
-    paren = READ_TOKEN(parser);
+    Token* rparen = READ_TOKEN(parser);
     if (!consume(parser, RPAREN)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            paren->index, paren->value.size + paren->index,
-            paren->pos, paren->value.size, "missing ')' symbol"}),
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            lparen->pos, 
+            lparen->value.size, 
+            "unclosed delimiter, expected a ')' at the end of the function call"}),
             Error
             );
         free_ast_node(node);
@@ -601,8 +659,10 @@ ASTNode* parse_list_index(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok->index, tok->value.size + tok->index,
-            tok->pos, tok->value.size, "missing ')' symbol"}),
+            tok->index, 
+            tok->pos, 
+            tok->value.size, 
+            "missing ')' symbol"}),
             Error
             );
         free_ast_node(id);
@@ -614,8 +674,10 @@ ASTNode* parse_list_index(Parser* parser) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok->index, tok->value.size + tok->index,
-            tok->pos, tok->value.size, "missing ')' symbol"}),
+            tok->index, 
+            tok->pos, 
+            tok->value.size, 
+            "missing ')' symbol"}),
             Error
             );
         free_ast_node(id);
@@ -645,7 +707,7 @@ ASTNode* parse_primary(Parser* parser) {
         case LPAREN: return parse_tuple(parser);
         case LBRAC: return parse_list(parser);
         case LCURLY: return parse_block(parser);
-        case IF_EXPR: return parse_if(parser);
+        case IF: return parse_if(parser);
         case BLOCK_EXPR: return parse_block(parser);
         case TOK_EOF: break;
 
@@ -654,7 +716,6 @@ ASTNode* parse_primary(Parser* parser) {
             APPEND(parser->parsing_errors,
                 ((Error) {SYNTAX_ERROR,
                 tok->index - tok->pos.col + 1, 
-                tok->value.size + tok->index,
                 tok->pos, 
                 tok->value.size, 
                 "unexpected symbol"}),
@@ -677,25 +738,28 @@ ASTNode* parse_block(Parser* parser) {
     bool unclosed = true;
 
     while(READ_TOKEN(parser)->type != TOK_EOF) {
-        ASTNode* stmt = parse_statement(parser);
-        APPEND(node->as_compound_statements, stmt, ASTNode*);
         if (consume(parser, RCURLY)) {
             unclosed = false;
             break;
         }
+        ASTNode* stmt = parse_statement(parser);
+        APPEND(node->as_compound_statements, stmt, ASTNode*);
+        
     }
+
     Token* eof_tok = READ_TOKEN(parser);
-    if (unclosed) {
+    if (unclosed && !consume(parser, RCURLY)) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             lcurly->index - lcurly->pos.col + 1, 
-            lcurly->index + 1,
             lcurly->pos, 
             lcurly->value.size, 
             "unclosed delimiter, missing '}' after a block expression"}),
             Error
             );
         // free node 
+        free_ast_node(node);
+        return NULL;
     }
     INIT_SYMBOL_TABLE(node->as_block_expr.table);
 
@@ -705,47 +769,83 @@ ASTNode* parse_block(Parser* parser) {
 }
 
 ASTNode* parse_elif(Parser* parser) {
+    Token* tok = READ_TOKEN(parser);
     consume(parser, ELIF);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_if_expr.else_ifs, ASTNode*);
     node->as_if_expr.cond = parse_expr(parser);
+    node->start_tok = tok;
+    node->end_tok = tok;
     node->type = IF_EXPR;
+    if (node->as_if_expr.cond == NULL) {
 
-    Token* tok = READ_TOKEN(parser);
-    if (consume(parser, THEN)) {
-
+        Position err_pos = {tok->pos.row, tok->pos.col + 3}; // point to the end of 'elif'
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
-            tok->index, tok->value.size + tok->index,
-            tok->pos, tok->value.size, "missing 'then' after if condition"}),
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            err_pos, 
+            0, "expected an expression after 'elif'"}),
             Error
-            );
+        );
+        free_ast_node(node);
+        return NULL;
+    }
+
+    tok = READ_TOKEN(parser);
+    if (!consume(parser, THEN)) {
+
+        // tok->value.size - 1 throws away the 0 character
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            node->as_if_expr.cond->end_tok->pos, 
+            node->as_if_expr.cond->end_tok->value.size - 1, "expected 'then' after elif condition"}),
+            Error
+        );
+        free_ast_node(node);
+        return NULL;
     }
     node->as_if_expr.expr= parse_expr(parser);
     return node;
 }
 
 ASTNode* parse_if(Parser* parser) {
+    Token* tok = READ_TOKEN(parser);
     consume(parser, IF);
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_if_expr.else_ifs, ASTNode*);
     node->as_if_expr.cond = parse_expr(parser);
+    node->start_tok = tok;
+    node->end_tok = tok;
     node->type = IF_EXPR;
+    if (node->as_if_expr.cond == NULL) {
+        Position err_pos = {tok->pos.row, tok->pos.col + 1}; // point to the end of 'if'
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            err_pos, 
+            0, "expected an expression after 'if'"}),
+            Error
+        );
+        free_ast_node(node);
+        return NULL;
+    }
 
-    Token* tok = READ_TOKEN(parser);
+    tok = READ_TOKEN(parser);
     if (!consume(parser, THEN)) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             tok->index - tok->pos.col + 1, 
-            tok->value.size + tok->index,
-            tok->pos, tok->value.size, 
-            "missing 'then' after an if condition"}),
+            tok->pos, 
+            tok->value.size - 1, 
+            "expected 'then' after an if condition"}),
             Error
             );
-        //TODO: free node
+
+        free_ast_node(node);
         return NULL;
     }
     node->as_if_expr.expr = parse_expr(parser);
@@ -757,12 +857,23 @@ ASTNode* parse_if(Parser* parser) {
     if (consume(parser, ELSE)) {
         node->as_if_expr.else_expr = parse_expr(parser);
     } 
+
+    if (node->as_if_expr.else_expr != NULL) {
+        node->end_tok = node->as_if_expr.else_expr->end_tok;
+    } else if (node->as_if_expr.else_ifs.size > 0) {
+        ASTNode* last_elif = INDEX_VECTOR(node->as_if_expr.else_ifs, ASTNode*, node->as_if_expr.else_ifs.size - 1);
+        if (last_elif != NULL) {
+            node->end_tok = last_elif->end_tok;
+        }
+    }
+
     return node;
 }
 
 
 ASTNode* parse_range(Parser* parser) {
     ASTNode* left = parse_or(parser);
+    if (left == NULL) return NULL;
     Token* tok = READ_TOKEN(parser);
     if (!consume(parser, RANGE)) return left;
     ASTNode* node;
@@ -772,21 +883,20 @@ ASTNode* parse_range(Parser* parser) {
     node->type = BIN_EXPR;
     node->as_bin_expr.op = tok;
     node->start_tok = node->as_bin_expr.left->start_tok;
+    node->end_tok = node->start_tok;
 
     if (node->as_bin_expr.right == NULL) {
 
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             left->start_tok->index - left->start_tok->pos.col + 1, 
-            tok->value.size + tok->index,
             tok->pos, 
             tok->value.size, 
             "expected an expression after '..'"}),
             Error
         );
 
-        //TODO: free node
-        node->end_tok = node->start_tok;
+        free_ast_node(node);
         return NULL;
     }
 
@@ -794,16 +904,18 @@ ASTNode* parse_range(Parser* parser) {
     return node;
 }
 
-ASTNode* parse_equality(Parser* parser) {
+ASTNode* parse_comparison(Parser* parser) {
     ASTNode* left = parse_range(parser);
-
-    if (left == NULL) {
-        //TODO: free memory
-        return NULL;
-    }
+    if (left == NULL) return NULL;
 
     Token* tok = READ_TOKEN(parser);
-    if (!consume(parser, DEQ)) return left;
+    if (!consume(parser, DEQ) 
+        && !consume(parser, NEQ) 
+        && !consume(parser, BTE) 
+        && !consume(parser, BT) 
+        && !consume(parser, LTE) 
+        && !consume(parser, LT)
+        ) return left;
 
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
@@ -815,13 +927,38 @@ ASTNode* parse_equality(Parser* parser) {
 
     if (node->as_bin_expr.right == NULL) {
 
+        char* err_msg;
+        switch(tok->type) {
+            case DEQ:
+                err_msg = "expected an expression after '=='";
+                break;
+            case NEQ:
+                err_msg = "expected an expression after '!='";
+                break;
+            case BTE:
+                err_msg = "expected an expression after '>='";
+                break;
+            case BT:
+                err_msg = "expected an expression after '>'";
+                break;
+            case LTE:
+                err_msg = "expected an expression after '<='";
+                break;
+            case LT:
+                err_msg = "expected an expression after '<'";
+                break;
+            default:
+                err_msg = "unexpected symbol";
+                break;
+
+        }
+
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             left->start_tok->index - left->start_tok->pos.col + 1, 
-            tok->value.size + tok->index,
             tok->pos, 
             tok->value.size, 
-            "expected an expression after '=='"}),
+            err_msg}),
             Error
         );
 
@@ -848,9 +985,21 @@ ASTNode* parse_type(Parser* parser) {
             node->type = PREDEFINED_TYPE;
             parser->cursor++;
             break;
-        default:
+        case TOK_EOF: return NULL;
+        case IDENTIFIER:
             node = parse_identifier_literal(parser);
             break;
+        default:
+
+            APPEND(parser->parsing_errors,
+                ((Error) {SYNTAX_ERROR,
+                tok->index - tok->pos.col + 1, 
+                tok->pos, 
+                tok->value.size, 
+                "unexpected symbol"}),
+                Error
+            );
+            return NULL;
     }
     return node;
 }
@@ -907,17 +1056,34 @@ ASTNode* parse_type_decl(Parser* parser) {
 }
 
 void parse_func_param(Parser* parser, ASTNode* node) {
-    if (READ_TOKEN(parser)->type == LPAREN) {
-        consume(parser, LPAREN);
+    Token* tok = READ_TOKEN(parser);
+    if (consume(parser, LPAREN)) {
         APPEND(node->as_func_decl.parameters, parse_identifier_literal(parser), ASTNode*);
         if (!consume(parser, RPAREN)) {
             //report error and free memory
+            APPEND(parser->parsing_errors,
+                ((Error) {SYNTAX_ERROR,
+                node->start_tok->index - node->start_tok->pos.col + 1, 
+                tok->pos, 
+                tok->value.size, 
+                "a parameter should be container within parentheses '(...)'"}),
+                Error
+            );
             return;
         }
-    } else if (READ_TOKEN(parser)->type == UNIT) {
+    } else if (consume(parser, UNIT)) {
         APPEND(node->as_func_decl.parameters, parse_type(parser), ASTNode*);
     } else {
         // report error and free memory
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            node->start_tok->index - node->start_tok->pos.col + 1, 
+            tok->pos, 
+            tok->value.size, 
+            "a parameter should be container within parentheses '(...)'"}),
+            Error
+        );
+        parser->cursor++;
         return;
     }
 }
@@ -934,6 +1100,8 @@ ASTNode* parse_func_decl(Parser* parser) {
     INIT_VECTOR(node->as_func_decl.parameters, ASTNode*);
     node->as_func_decl.sym_id = func_id;
     node->type = FUNC_DECL;
+    node->start_tok = func_id->start_tok;
+    node->end_tok = node->start_tok; // set end_tok to start_tok before parsing params
 
     parse_func_param(parser, node);
     while(consume(parser, ARROW)) {
@@ -941,30 +1109,23 @@ ASTNode* parse_func_decl(Parser* parser) {
     }
 
     node->as_func_decl.block = parse_block(parser);
+    if (node->as_func_decl.block != NULL) {
+        node->end_tok = node->as_func_decl.block->start_tok;
+    }
 
     return node;
 
 }
 
-ASTNode* parse_block_based_expr(Parser* parser) {
-    Token* tok = READ_TOKEN(parser);
-    switch(tok->type) {
-        case IF: return parse_if(parser);
-        case LCURLY: return parse_block(parser);
-        case TOK_EOF: break;
-        default: return parse_equality(parser);
-    }
-    return NULL;
-}
 
 ASTNode* parse_assignment(Parser* parser) {
-    ASTNode* left = parse_block_based_expr(parser);
+    ASTNode* left = parse_comparison(parser);
     if (left == NULL) return NULL;
     Token* eq = READ_TOKEN(parser);
     if (!consume(parser, EQ)) {
         return left;
     }
-    ASTNode* right = parse_block_based_expr(parser);
+    ASTNode* right = parse_comparison(parser);
     if (right == NULL) return NULL;
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
@@ -1023,7 +1184,7 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
         print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
     }
-    //print_node(root, 0);
+    print_node(root, 0);
 
     return 0;
 }

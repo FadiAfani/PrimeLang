@@ -18,13 +18,16 @@ void print_error(Error error, char* filename, char* src) {
     }
 
     /**
-     * starts from the very beginning of the row and column of where the error ocurred
+     * starts from error.src_start_pos
+     * stops when it encounters a line character
     */
 
 
     printf("%d |  ", error.pos.row);
-    for (size_t i = error.src_start_pos; i < error.src_end_pos; i++) {
-        printf("%c", src[i]);
+    size_t i = error.src_start_pos;
+    char c;
+    while ((c = src[i++]) != '\0' && c != '\r' && c != '\n') {
+        printf("%c", c);
     }
     printf("\n");
     while(counter > 0) {

@@ -36,7 +36,7 @@ ASTNode* parse_if(Parser* parser);
 ASTNode* parse_elif(Parser* parser);
 ASTNode* parse_func_decl(Parser* parser);
 ASTNode* parse_type(Parser* parser);
-ASTNode* parse_equality(Parser* parser);
+ASTNode* parse_comparison(Parser* parser);
 ASTNode* parse_block_based_expr(Parser* parser);
 void parse_type_annotation(Parser* parser, ASTNode* node);
 void parse_type_constructor(Parser* parser, ASTNode* node);
