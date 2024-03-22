@@ -6,18 +6,27 @@
 
 
 static inline float get_load_factor(SymbolTable* table) {
-    return table->entries.size / table->entries.capacity;
+    return (float) table->entries.size / table->entries.capacity;
 }
 
 Symbol* lookup(SymbolTable* table, char* key) {
-    int i = strlen(key) % (table->entries.size);
-    for (size_t j = i; j < table->entries.size; i++) {
-        Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, i);
-        if (sym == NULL) return NULL;
+    SymbolTable* cur = table;
+    while (cur != NULL) {
+    
+        int i = strlen(key) % (table->entries.capacity);
+        for (size_t j = i; j < table->entries.capacity; j++) {
+            Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, i);
+            if (sym == NULL) {
+                cur = table->parent;
+                break;
+            }
 
-        if (strcmp(sym->key, key) == 0) {
-            return sym;
+            if (strcmp(sym->key, key) == 0) {
+                sym->outer_index = cur->outers_count++;
+                return sym;
+            }
         }
+
     }
     return NULL;
 }
@@ -29,12 +38,13 @@ void insert(SymbolTable* table, char* key, Symbol* value) {
         // refactor
         Vector* entries = &(table->entries);
         REALLOCATE(entries->arr, table->entries.capacity, Symbol);
-        table->entries.capacity *= 2;
+        table->entries.capacity *= SCALE_FACTOR;
     }
-    for (size_t j = i; j < table->entries.size; i++) {
+    for (size_t j = i; j < table->entries.capacity; j++) {
         Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, i);
         if (sym == NULL || strcmp(sym->key, key) == 0) {
             APPEND(table->entries, value, Symbol*);
+            sym->local_index = table->locals_count++;
             break;
         }
 

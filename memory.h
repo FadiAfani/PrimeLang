@@ -5,6 +5,8 @@
 
 #include "vm.h"
 
+#define SCALE_FACTOR 2
+
 #define CHECK_FAILED_ALLOCATION(ptr) ({\
 		if (!ptr) {\
 		    printf("Failure in memory allocation"); \
@@ -18,7 +20,7 @@
 })
 
 #define REALLOCATE(ptr, prev_size, type) ({\
-	type* new_ptr = realloc(ptr, 2  * sizeof(type) * prev_size); \
+	type* new_ptr = realloc(ptr, SCALE_FACTOR * sizeof(type) * prev_size); \
     if (!new_ptr) { \
 		    printf("Realloc failed\n"); \
 			free(ptr); \

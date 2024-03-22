@@ -1,9 +1,13 @@
 #include "parser.h"
 #include "memory.h"
+#include "symbol_table.h"
 #include "vector.h"
 #include "error.h"
-#include <stdbool.h>
 #include "malloc.h"
+#include "semantics.h"
+#include "type.h"
+#include <stdbool.h>
+#include "codegen.h"
 
 #define READ_TOKEN(parser) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor)))
 #define PEEK_AT(parser, i) (((Token*) (parser->lexer.tokens.arr))[parser->cursor + i])
@@ -18,6 +22,7 @@ void init_parser(Parser* parser) {
     parser->parsing_errors = (Vector) {INIT_VECTOR_CAP, 0, NULL};
     ALLOCATE(parser->parsing_errors.arr, Error, INIT_VECTOR_CAP);
     parser->cursor = 0;
+    INIT_SYMBOL_TABLE(parser->global_table);
 }
 
 void free_ast_node(ASTNode* node) {
@@ -102,7 +107,6 @@ void print_node(ASTNode* node, int depth) {
 
         case TYPE_DECL:
             printf("<type-decl>\n");
-            print_node(node->as_type_decl.sym_id, depth + 1);
             for(int i = 0; i < depth + 1; i++) {
                 printf("\t");
             }
@@ -111,10 +115,9 @@ void print_node(ASTNode* node, int depth) {
 
         case FUNC_DECL:
             printf("<func-decl>\n");
-            print_node(node->as_func_decl.sym_id, depth + 1);
             Vector vec = node->as_func_decl.parameters;
             for(size_t i = 0; i < vec.size; i++) {
-                print_node((INDEX_VECTOR(vec, ASTNode*, i)), depth + 1);
+                //print_node((INDEX_VECTOR(vec, ASTNode*, i)), depth + 1);
             }
             print_node(node->as_func_decl.block, depth + 1);
             break;
@@ -167,7 +170,7 @@ static bool consume(Parser* parser, TokenType token_type) {
 }
 
 void parse_type_annotation(Parser* parser, ASTNode* node) {
-    ASTNode* fst_type = parse_type(parser);
+    Token* fst_type = parse_type(parser);
     if (fst_type == NULL) {
         APPEND(
             parser->parsing_errors,
@@ -184,10 +187,10 @@ void parse_type_annotation(Parser* parser, ASTNode* node) {
     Vector* vec;
     ALLOCATE(vec, Vector, 1);
     INIT_VECTOR((*vec), ASTNode*);
-    APPEND((*vec), fst_type, ASTNode*);
+    APPEND((*vec), fst_type, Token*);
 
     while(consume(parser, ARROW)) {
-        APPEND((*vec), parse_type(parser), ASTNode*);
+        APPEND((*vec), parse_type(parser), Token*);
     }
 
     if (vec->size == 0) {
@@ -296,6 +299,20 @@ ASTNode* parse_literal(Parser* parser) {
             break;
     }
     return NULL;
+}
+
+ASTNode* parse_unary_expr(Parser* parser) {
+    Token* op = READ_TOKEN(parser);
+    if (!consume(parser, MINUS)) return NULL;
+    ASTNode* expr = parse_expr(parser);
+    if (expr == NULL) return NULL;
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->type = UNARY_EXPR;
+    node->as_un_expr.op = op;
+    node->as_un_expr.operand = expr;
+    return node;
+    
 }
 
 // <factor> := <literal> ( [ * | \ ] <literal> )*
@@ -709,6 +726,7 @@ ASTNode* parse_primary(Parser* parser) {
         case LCURLY: return parse_block(parser);
         case IF: return parse_if(parser);
         case BLOCK_EXPR: return parse_block(parser);
+        case BREAK: return parse_break_expr(parser);
         case TOK_EOF: break;
 
         default: 
@@ -735,14 +753,49 @@ ASTNode* parse_block(Parser* parser) {
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_compound_statements, ASTNode*);
     node->type = BLOCK_EXPR;
+    node->start_tok = lcurly;
+    INIT_SYMBOL_TABLE(node->as_block_expr.table);
+    node->as_block_expr.table.parent = &parser->global_table;
     bool unclosed = true;
 
     while(READ_TOKEN(parser)->type != TOK_EOF) {
+        Token* rcurly = READ_TOKEN(parser);
         if (consume(parser, RCURLY)) {
+            node->end_tok = rcurly;
             unclosed = false;
             break;
         }
         ASTNode* stmt = parse_statement(parser);
+        if (stmt == NULL) return NULL;
+        switch(stmt->type) {
+            case BLOCK_EXPR:
+                stmt->as_block_expr.table.parent = &node->as_block_expr.table;
+                break;
+            case IF_EXPR:
+                if(stmt->as_if_expr.expr->type == BLOCK_EXPR) {
+                    stmt->as_if_expr.expr->as_block_expr.table.parent = &node->as_block_expr.table;
+                }
+                break;
+            case FUNC_DECL:
+            {
+                Symbol* sym;
+                ALLOC_SYMBOL(sym);
+                sym->key = node->as_func_decl.sym_id->value.arr;
+                insert(&node->as_block_expr.table, CAST_VECTOR(stmt->as_func_decl.sym_id->value, char), NULL);
+                stmt->as_func_decl.block->as_block_expr.table.parent = &node->as_block_expr.table;
+                break;
+            }
+            case LITERAL_EXPR:
+                if (stmt->as_literal_expr->type == IDENTIFIER) {
+                    Symbol* sym;
+                    ALLOC_SYMBOL(sym);
+                    sym->key = node->as_id_literal.id_token->value.arr;
+                    insert(&node->as_block_expr.table, CAST_VECTOR(stmt->as_id_literal.id_token->value, char), NULL);
+                }
+                break;
+
+            default: break;
+        }
         APPEND(node->as_compound_statements, stmt, ASTNode*);
         
     }
@@ -757,11 +810,9 @@ ASTNode* parse_block(Parser* parser) {
             "unclosed delimiter, missing '}' after a block expression"}),
             Error
             );
-        // free node 
         free_ast_node(node);
         return NULL;
     }
-    INIT_SYMBOL_TABLE(node->as_block_expr.table);
 
 
     return node;
@@ -962,7 +1013,7 @@ ASTNode* parse_comparison(Parser* parser) {
             Error
         );
 
-        //TODO: free node
+        free_ast_node(node);
         node->end_tok = node->start_tok;
         return NULL;
     }
@@ -971,24 +1022,18 @@ ASTNode* parse_comparison(Parser* parser) {
     return node;
 }
 
-ASTNode* parse_type(Parser* parser) {
+Token* parse_type(Parser* parser) {
     Token* tok = READ_TOKEN(parser);
-    ASTNode* node;
     switch (tok->type) {
         case TYPE_INT:
         case TYPE_DOUBLE:
         case TYPE_STRING:
         case TYPE_BOOL:
         case UNIT:
-            ALLOCATE(node, ASTNode, 1);
-            node->as_type = tok;
-            node->type = PREDEFINED_TYPE;
+        case IDENTIFIER:
             parser->cursor++;
             break;
         case TOK_EOF: return NULL;
-        case IDENTIFIER:
-            node = parse_identifier_literal(parser);
-            break;
         default:
 
             APPEND(parser->parsing_errors,
@@ -999,43 +1044,79 @@ ASTNode* parse_type(Parser* parser) {
                 "unexpected symbol"}),
                 Error
             );
+            parser->cursor++;
             return NULL;
     }
-    return node;
+    return tok;
 }
 
 void parse_type_constructor(Parser* parser, ASTNode* node) {
-    ASTNode* const_id = parse_identifier_literal(parser);
-    APPEND(node->as_type_decl.enums, const_id, ASTNode*);
+    Token* const_id = READ_TOKEN(parser);
+    if (const_id == NULL) return;
+    
+    APPEND(node->as_type_decl.enums, const_id, Token*);
     if (!consume(parser, LPAREN)) {
         // no inner types / sub-types to parse
         // append a null representing no inner types
-        APPEND(node->as_type_decl.inner_types, NULL, ASTNode*);
+        APPEND(node->as_type_decl.inner_types, NULL, Token*);
         return;
     }
-    ASTNode* fst_type = parse_type(parser);
+    Token* fst_type = parse_type(parser);
+    if (fst_type == NULL) {
+        Token* tok = READ_TOKEN(parser);
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok->index - tok->pos.col + 1, 
+            tok->pos, 
+            tok->value.size, 
+            "unexpected symbol"}),
+            Error
+        );
+        return;
+    }
     Vector* inner_types;
     ALLOCATE(inner_types, ASTNode, 1);
     INIT_VECTOR((*inner_types), ASTNode);
-    APPEND((*inner_types), fst_type, ASTNode*);
+    APPEND((*inner_types), fst_type, Token*);
     while (consume(parser, COMMA)) {
-        APPEND((*inner_types), parse_type(parser), ASTNode*);
+        Token* tok = READ_TOKEN(parser);
+        APPEND((*inner_types), parse_type(parser), Token*);
     }
-    APPEND(node->as_type_decl.inner_types, inner_types, Vector*);
 
     if (!consume(parser, RPAREN)) {
         //report error and free memory
+        Token* tok = READ_TOKEN(parser);
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok->index - tok->pos.col + 1, 
+            tok->pos, 
+            tok->value.size, 
+            "expected a ')' after an enum"}),
+            Error
+        );
+
+        free_ast_node(node);
         return;
     }
+
+    APPEND(node->as_type_decl.inner_types, inner_types, Vector*);
 }
 
 ASTNode* parse_type_decl(Parser* parser) {
     consume(parser, KEYWORD_TYPE);
-    ASTNode* type_id = parse_identifier_literal(parser);
+    Token* type_id = READ_TOKEN(parser);
+    if (!consume(parser, IDENTIFIER)) return NULL;
 
     if (!consume(parser, EQ)) {
-        // report error
-        free_ast_node(type_id);
+        Token* tok = READ_TOKEN(parser);
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            tok->index - tok->pos.col + 1, 
+            tok->pos, 
+            tok->value.size, 
+            "expected a '=' after a type identifier"}),
+            Error
+        );
         return NULL;
     }
 
@@ -1043,7 +1124,7 @@ ASTNode* parse_type_decl(Parser* parser) {
     ALLOCATE(node, ASTNode, 1);
     node->type = TYPE_DECL;
     node->as_type_decl.sym_id = type_id;
-    INIT_VECTOR(node->as_type_decl.enums, Symbol);
+    INIT_VECTOR(node->as_type_decl.enums, Token);
     INIT_VECTOR(node->as_type_decl.inner_types, Vector);
 
     parse_type_constructor(parser, node);
@@ -1060,7 +1141,7 @@ void parse_func_param(Parser* parser, ASTNode* node) {
     if (consume(parser, LPAREN)) {
         APPEND(node->as_func_decl.parameters, parse_identifier_literal(parser), ASTNode*);
         if (!consume(parser, RPAREN)) {
-            //report error and free memory
+
             APPEND(parser->parsing_errors,
                 ((Error) {SYNTAX_ERROR,
                 node->start_tok->index - node->start_tok->pos.col + 1, 
@@ -1072,9 +1153,9 @@ void parse_func_param(Parser* parser, ASTNode* node) {
             return;
         }
     } else if (consume(parser, UNIT)) {
-        APPEND(node->as_func_decl.parameters, parse_type(parser), ASTNode*);
+        APPEND(node->as_func_decl.parameters, parse_type(parser), Token*);
     } else {
-        // report error and free memory
+
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
             node->start_tok->index - node->start_tok->pos.col + 1, 
@@ -1089,18 +1170,16 @@ void parse_func_param(Parser* parser, ASTNode* node) {
 }
 
 ASTNode* parse_func_decl(Parser* parser) {
-    ASTNode* func_id = parse_identifier_literal(parser);
-    if (!consume(parser, DOUBLE_COLON)) {
-        // report an error
-        free_ast_node(func_id);
-        return NULL;
-    }
+    Token* func_id = READ_TOKEN(parser);
+    if (!consume(parser, IDENTIFIER)) return NULL;
+    if (!consume(parser, DOUBLE_COLON)) return NULL;
+
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     INIT_VECTOR(node->as_func_decl.parameters, ASTNode*);
     node->as_func_decl.sym_id = func_id;
     node->type = FUNC_DECL;
-    node->start_tok = func_id->start_tok;
+    node->start_tok = func_id;
     node->end_tok = node->start_tok; // set end_tok to start_tok before parsing params
 
     parse_func_param(parser, node);
@@ -1126,7 +1205,19 @@ ASTNode* parse_assignment(Parser* parser) {
         return left;
     }
     ASTNode* right = parse_comparison(parser);
-    if (right == NULL) return NULL;
+    if (right == NULL) {
+
+        APPEND(parser->parsing_errors,
+            ((Error) {SYNTAX_ERROR,
+            eq->pos.col + 1, 
+            eq->pos, 
+            eq->value.size, 
+            "expected an expression after '='"}),
+            Error
+        );
+        free_ast_node(left);
+        return NULL;
+    }
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     node->as_bin_expr.op = eq;
@@ -1146,11 +1237,30 @@ ASTNode* parse_expr(Parser* parser) {
     return node;
 }
 
+ASTNode* parse_break_expr(Parser* parser) {
+    Token* tok = READ_TOKEN(parser);
+    consume(parser, BREAK);
+    ASTNode* node;
+    ALLOCATE(node, ASTNode, 1);
+    node->type = BREAK_EXPR;
+    node->as_break_expr = parse_expr(parser);
+    node->start_tok = tok;
+    if (node->as_break_expr == NULL) {
+        node->end_tok = tok;
+    } else {
+        node->end_tok = node->as_break_expr->end_tok;
+    }
+
+    return node;
+}
+
 
 ASTNode* parse_statement(Parser* parser) {
     switch(READ_TOKEN(parser)->type) {
         case KEYWORD_TYPE:
             return parse_type_decl(parser);
+        default:
+            break;
         
     }
     if (READ_TOKEN(parser)->type == IDENTIFIER && PEEK_NEXT(parser).type == DOUBLE_COLON) {
@@ -1169,6 +1279,7 @@ ASTNode* parse_compound(Parser* parser) {
     while(READ_TOKEN(parser)->type != TOK_EOF) {
         APPEND(node->as_compound_statements, parse_statement(parser), ASTNode*);
     }
+
     return node;
 }
 
@@ -1179,12 +1290,20 @@ int main(int argc, char** argv) {
     init_parser(parser);
     load_file_into_memory(&(parser->lexer), "ctest.txt");
     tokenize(&(parser->lexer));
-    ASTNode* root = parse_compound(parser);
+    ASTNode* root = parse_factor(parser);
     //print_lexer(&parser->lexer);
+    PrimeType* t = infer_expr_type(&parser->global_table, &parser->parsing_errors, root);
+    print_type(t);
     for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
         print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
     }
-    print_node(root, 0);
+    // print_node(root, 0);
+    Compiler* compiler;
+    ALLOCATE(compiler, Compiler, 1);
+    init_compiler(compiler);
+    compile_expr(root, compiler, &parser->global_table);
+    write_compiler_data("out.bin", compiler);
+
 
     return 0;
 }

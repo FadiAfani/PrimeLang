@@ -12,8 +12,14 @@ void print_error(Error error, char* filename, char* src) {
         case COMPILATION_ERROR: 
             printf("SyntaxError:%d:%d: %s\n", error.pos.row, error.pos.col, error.err_msg);
             break;
+        case TYPE_ERROR:
+            printf("TypeError:%d:%d: %s\n", error.pos.row, error.pos.col, error.err_msg);
+            break;
+        case UNDEFINED_SYMBOL_ERROR:
+            printf("UndefinedSymbol:%d:%d: %s\n", error.pos.row, error.pos.col, error.err_msg);
+            break;
         default: 
-            printf("Unkown Error Type\n");
+            printf("Unkown Error Type: %d\n", error.type);
             exit(EXIT_FAILURE);
     }
 

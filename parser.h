@@ -12,6 +12,7 @@ typedef struct Parser {
     ASTNode* root;
     Vector parsing_errors;
     size_t cursor;
+    SymbolTable global_table;
 }Parser;
 
 ASTNode* parse_identifier_literal(Parser* parser);
@@ -27,6 +28,7 @@ ASTNode* parse_assignment(Parser* parser);
 ASTNode* parse_expr(Parser* parser);
 ASTNode* parse_group_expr(Parser* parser);
 ASTNode* parse_func_call(Parser* parser);
+ASTNode* parse_unary_expr(Parser* parser);
 ASTNode* parse_primary(Parser* parser);
 ASTNode* parse_statement(Parser* parser);
 ASTNode* parse_compound(Parser* parser);
@@ -35,9 +37,10 @@ ASTNode* parse_block(Parser* parser);
 ASTNode* parse_if(Parser* parser);
 ASTNode* parse_elif(Parser* parser);
 ASTNode* parse_func_decl(Parser* parser);
-ASTNode* parse_type(Parser* parser);
+Token*   parse_type(Parser* parser);
 ASTNode* parse_comparison(Parser* parser);
 ASTNode* parse_block_based_expr(Parser* parser);
+ASTNode* parse_break_expr(Parser* parser);
 void parse_type_annotation(Parser* parser, ASTNode* node);
 void parse_type_constructor(Parser* parser, ASTNode* node);
 

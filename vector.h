@@ -17,6 +17,21 @@
     ((type*) vector.arr)[vector.size++] = elem; \
 })
 
+#define INSERT_AT(vector, elem, type, idx) ({ \
+    if (vector.size >= vector.capacity) { \
+        REALLOCATE(vector.arr, vector.capacity, type); \
+        vector.capacity *= 2; \
+    } \
+    if (idx < vector.capacity) { \
+        ((type*) vector.arr)[idx] = elem; \
+    } \
+})
+
+#define REALLOC_VECTOR(vector, type) ({ \
+    REALLOCATE(vector.arr, vector.capacity, type); \
+    vector.capacity *= SCALE_FACTOR; \
+})
+
 #define INIT_VECTOR(vector, type) ({ \
     vector.capacity = INIT_VECTOR_CAP; \
     vector.size = 0; \

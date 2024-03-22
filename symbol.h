@@ -34,9 +34,11 @@ typedef struct Symbol {
         Vector as_enum_symbol; // vector of PrimeType's
         FuncSymbol as_func_symbol; // vector storing function parameters
     };
+    int outer_index; /* -1 if symbol is not an outer value*/
+    int local_index;
     SymbolType type;
 }Symbol;
 
-
+#define ALLOC_SYMBOL(ptr) (ALLOCATE(ptr, Symbol, 1))
 
 #endif

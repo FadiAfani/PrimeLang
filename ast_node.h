@@ -36,14 +36,10 @@ typedef struct ASTNode ASTNode;
 typedef struct Symbol Symbol;
 typedef struct TypeList TypeList;
 
-struct TypeList {
-    ASTNode* node;
-    TypeList* next;
-};
-
 typedef struct IdentifierExpr {
     Token* id_token;
     Vector* id_type;
+    PrimeType* p_type;
 }IdentifierExpr;
 
 typedef struct BinExpr {
@@ -109,16 +105,16 @@ typedef struct BreakExpr {
 
 /*
  * enums[i] is the enum
- * inner_types[i] is a vector
+ * inner_types[i] is a vector of tokens
  * */
 typedef struct TypeDecl {
-    ASTNode* sym_id;
+    Token* sym_id;
     Vector enums;
     Vector inner_types; 
 }TypeDecl;
 
 typedef struct FuncDecl {
-    ASTNode* sym_id;
+    Token* sym_id;
     ASTNode* block;
     Vector parameters; // vector of ASTNode*
 }FuncDecl;
@@ -141,6 +137,7 @@ struct ASTNode {
         BlockExpr as_block_expr;
         TypeDecl as_type_decl;
         FuncDecl as_func_decl;
+        ASTNode* as_break_expr;
     };
     Token* start_tok;
     Token* end_tok;
