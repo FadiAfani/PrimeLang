@@ -28,6 +28,7 @@ typedef enum NodeType {
     FUNC_DECL, 
     TYPE_DECL,
     PREDEFINED_TYPE,
+    PROGRAM,
 
 
 }NodeType;
@@ -142,6 +143,7 @@ struct ASTNode {
     Token* start_tok;
     Token* end_tok;
     NodeType type;
+    PrimeType* p_type;
 };
 
 #endif

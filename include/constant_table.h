@@ -9,11 +9,13 @@ typedef enum ConstType {
 
 typedef struct Const {
     union {
+        char* as_var_const;
         char* as_func_const;
         char* as_string_const;
         int as_int_const;
         double as_double_const;
     };
+    Vector bytes;
     uint16_t const_index;
     ConstType type;
 }Const;

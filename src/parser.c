@@ -7,7 +7,6 @@
 #include "semantics.h"
 #include "type.h"
 #include <stdbool.h>
-#include "codegen.h"
 
 #define READ_TOKEN(parser) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor)))
 #define PEEK_AT(parser, i) (((Token*) (parser->lexer.tokens.arr))[parser->cursor + i])
@@ -120,6 +119,14 @@ void print_node(ASTNode* node, int depth) {
                 //print_node((INDEX_VECTOR(vec, ASTNode*, i)), depth + 1);
             }
             print_node(node->as_func_decl.block, depth + 1);
+            break;
+        case FUNC_CALL_EXPR:
+            printf("<func-call>\n");
+            print_token(*node->as_func_call.func_id);
+            for (size_t i = 0; i < node->as_func_call.params.size; i++) {
+                print_node(INDEX_VECTOR(node->as_func_call.params, ASTNode*, i), depth + 1);
+            }
+
             break;
 
         case PREDEFINED_TYPE:
@@ -599,19 +606,18 @@ ASTNode* parse_tuple(Parser* parser) {
 
 
 ASTNode* parse_func_call(Parser* parser) {
-    ASTNode* id = parse_identifier_literal(parser);
+    Token* id_tok = READ_TOKEN(parser);
+    consume(parser, IDENTIFIER);
 
     Token* lparen = READ_TOKEN(parser);
-    if (!consume(parser, LPAREN)) {
-        free_ast_node(id);
-        return NULL;
-    }
+    if (!consume(parser, LPAREN)) return NULL;
 
     ASTNode* node = NULL;
     ALLOCATE(node, ASTNode, 1);
-    node->start_tok = id->start_tok;
+    node->start_tok = id_tok;
     node->end_tok = node->start_tok;
     node->type = FUNC_CALL_EXPR;
+    node->as_func_call.func_id = id_tok;
     INIT_VECTOR(node->as_func_call.params, ASTNode*);
     ASTNode* arg = parse_expr(parser);
     if (arg == NULL) {
@@ -1282,28 +1288,10 @@ ASTNode* parse_compound(Parser* parser) {
 
     return node;
 }
-
-
-int main(int argc, char** argv) {
-    Parser* parser;
-    ALLOCATE(parser, Parser, 1);
-    init_parser(parser);
-    load_file_into_memory(&(parser->lexer), "ctest.txt");
-    tokenize(&(parser->lexer));
-    ASTNode* root = parse_factor(parser);
-    //print_lexer(&parser->lexer);
-    PrimeType* t = infer_expr_type(&parser->global_table, &parser->parsing_errors, root);
-    print_type(t);
-    for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
-        print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
-    }
-    // print_node(root, 0);
-    Compiler* compiler;
-    ALLOCATE(compiler, Compiler, 1);
-    init_compiler(compiler);
-    compile_expr(root, compiler, &parser->global_table);
-    write_compiler_data("out.bin", compiler);
-
-
-    return 0;
+// this might not be needed
+ASTNode* parse_program(Parser* parser) {
+    ASTNode* node = parse_compound(parser);
+    node->type = PROGRAM;
 }
+
+

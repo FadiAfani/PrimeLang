@@ -15,14 +15,12 @@ typedef enum ValueType {
     EMPTY
 }ValueType;
 
-typedef struct Value {
-	union {	
-		double number;
-        int ret_addr;
-        void* ref;
-        bool as_bool;
-	};
-	ValueType type;
+
+typedef union {	
+    double as_double;
+    int as_int;
+    void* as_ref;
+    bool as_bool;
 }Value;
 
 

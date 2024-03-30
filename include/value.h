@@ -7,10 +7,7 @@
 
 #include "vh_common.h"
 
-#define LIST_SCALING_FACTOR 1.5
-
-
-typedef struct {
+typedef struct Obj {
     enum {
         OBJ_CLSR,
         OBJ_FUNC,
@@ -22,17 +19,17 @@ typedef struct {
     
 }Obj;
 
+typedef struct FuncObj FuncObj;
 
-typedef struct {
+struct FuncObj{
     Obj obj;
+    uint8_t arity;
     uint8_t* insts;
     uint16_t loc_cnt;
-    uint8_t arity;
-    Value* consts;
-    HashTable* outerVals;
-    void* parent; /* a reference to a parent closure */
+    Value** outerVals; /* stores references to consts */
+    FuncObj* parent; /* a reference to a parent closure */
+};
 
-}ClosureObj;
 
 typedef struct {
     Obj obj;
@@ -55,11 +52,12 @@ typedef struct {
 }ListObj;
 
 typedef struct {
+    Obj obj;
     Value* fields;
 }StructObj;
 
 
-ClosureObj* init_closure(uint8_t* insts, Value* consts, uint16_t n_locals, uint8_t arity);
+FuncObj* init_closure(uint8_t* insts, Value* consts, uint16_t n_locals, uint8_t arity);
 StringObj* init_string_obj(char* str, uint16_t len);
 ListObj* init_list_obj();
 StructObj* init_struct_obj();

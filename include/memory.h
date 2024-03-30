@@ -36,4 +36,6 @@
     free(vec); \
 })
 
+void* reverse_memcpy(void* dest, void* src, size_t len);
+
 #endif 
