@@ -5,39 +5,54 @@
 #include <time.h>
 #include <string.h>
 
-#include "vm.h"
-#include "parser.h"
-#include "vector.h"
-#include "codegen.h"
-#include "error.h"
-#include "prime_file_parser.h"
-#include "semantics.h"
+#include "../include/vm.h"
+#include "../include/parser.h"
+#include "../include/vector.h"
+#include "../include/codegen.h"
+#include "../include/error.h"
+#include "../include/prime_file_parser.h"
+#include "../include/semantics.h"
 #include <assert.h>
 
+/* args
+ * argv[1] - input file
+ * argv[2] - output file
+ * */
+
 int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("USAGE: ./main arg1 arg2\n");
+        return 1;
+    }
 	Parser* parser;
+    SymbolTable* global_syms;
+    ALLOC_SYMBOL_TABLE(global_syms);
+    INIT_SYMBOL_TABLE((*global_syms));
     ALLOCATE(parser, Parser, 1);
     init_parser(parser);
-    load_file_into_memory(&(parser->lexer), "ctest.txt");
+    push_scope(&parser->scopes, global_syms);
+    load_file_into_memory(&(parser->lexer), argv[1]);
     tokenize(&(parser->lexer));
+
     ASTNode* root = parse_program(parser);
-    //print_lexer(&parser->lexer);
-	assert(root != NULL);
-    infer_program(&parser->global_table, &parser->parsing_errors, root);
+    TypeChecker* tc;
+    ALLOC_TYPE_CHECKER(tc);
+    init_type_checker(tc);
+    push_scope(&tc->scopes, global_syms);
+    infer_program(tc, root);
     for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
         print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
     }
     //print_node(root, 0);
     Compiler* compiler;
-    ALLOCATE(compiler, Compiler, 1);
+    ALLOC_COMPILER(compiler);
     init_compiler(compiler);
-    compile_program(root, compiler, &parser->global_table);
-    write_compiler_data("out.bin", compiler, &parser->global_table);
+    push_scope(&compiler->scopes, global_syms);
+    compile_program(root, compiler);
+    write_compiler_data(argv[2], compiler);
 
 	VM* vm = init_VM();
-    vm->mem = parse_prime_file("out.bin");
-	uint16_t consts_size = sizeof(vm->mem) / sizeof(Value);
-	uint16_t main_entry = consts_size - 1;
+    vm->mem = parse_prime_file(argv[2]);
     uint8_t insts[5] = {OP_CONST, 0, 0, OP_CALL, OP_HALT};
     vm->code = insts;
     run(vm);

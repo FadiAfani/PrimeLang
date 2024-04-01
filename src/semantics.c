@@ -1,6 +1,11 @@
-#include "semantics.h"
-#include "error.h"
+#include "../include/semantics.h"
+#include "../include/error.h"
 #include <string.h>
+
+void init_type_checker(TypeChecker* tc) {
+    INIT_VECTOR(tc->semantic_errors, Error);
+    tc->scopes.sp = -1;
+}
 
 static bool compare_types(PrimeType* a, PrimeType* b) {
     if (a->type_kind == BUILT_IN && b->type_kind == BUILT_IN) {
@@ -10,7 +15,7 @@ static bool compare_types(PrimeType* a, PrimeType* b) {
     }
     return false;
 }
-void infer_literal_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_literal_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* res;
     ALLOC_TYPE(res);
     switch(node->as_literal_expr->type) {
@@ -28,7 +33,7 @@ void infer_literal_type(SymbolTable* table, Vector* type_errors, ASTNode* node) 
                  * if found simply return its type otherwise return NULL
                  * */
 
-                Symbol* sym = lookup(table, (char*) node->as_literal_expr->value.arr);
+                Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_literal_expr->value.arr);
                 if (sym == NULL) {
                     Error err;
                     err.type = UNDEFINED_SYMBOL_ERROR;
@@ -37,11 +42,12 @@ void infer_literal_type(SymbolTable* table, Vector* type_errors, ASTNode* node) 
                     err.src_start_pos = node->start_tok->index - node->start_tok->pos.col + 1;
                     err.err_msg = "symbol is not defined";
 
-                    APPEND((*type_errors), err, Error);
+                    APPEND(tc->semantic_errors, err, Error);
 
                 }
+                res = sym->as_var_symbol;
+                break;
             }
-            break;
         default:
             return;
 
@@ -49,14 +55,27 @@ void infer_literal_type(SymbolTable* table, Vector* type_errors, ASTNode* node) 
     node->p_type = res;
 }
 
-void infer_var_from_assignment(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_var_from_assignment(TypeChecker* tc, ASTNode* node) {
     if (node == NULL) return;
-    infer_expr_type(table, type_errors, node->as_bin_expr.right);
-    node->as_bin_expr.left->as_id_literal.p_type = node->as_bin_expr.right->p_type;
+    ASTNode* var = node->as_bin_expr.left;
+    switch(var->type) {
+        case LITERAL_EXPR:
+            if (var->as_literal_expr->type != IDENTIFIER) {
+                /* report error */
+                return;
+            }
+            Symbol* sym = lookup_symbol(&tc->scopes, (char*) var->as_literal_expr->value.arr);
+            infer_expr_type(tc, node->as_bin_expr.right);
+            sym->as_var_symbol = node->as_bin_expr.right->p_type;
+            break;
+        default:
+            printf("assignment inference is not implemented for this node type\n");
+            return;
+    }
 }
 
 
-void infer_binary_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_binary_expr_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* expr_type;
     ALLOC_TYPE(expr_type);
     Error err;
@@ -73,8 +92,9 @@ void infer_binary_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* no
         case MINUS:
         case DIV:
         case MULT:
-            infer_expr_type(table, type_errors, node->as_bin_expr.left);
-            infer_expr_type(table, type_errors, node->as_bin_expr.right);
+        {
+            infer_expr_type(tc, node->as_bin_expr.left);
+            infer_expr_type(tc, node->as_bin_expr.right);
             PrimeType* left = node->as_bin_expr.left->p_type;
             PrimeType* right = node->as_bin_expr.right->p_type;
 
@@ -91,25 +111,29 @@ void infer_binary_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* no
                                 break;
                             default:
                                 err.err_msg = "operation is not supported between these types";
-                                APPEND((*type_errors), err, Error);
+                                APPEND(tc->semantic_errors, err, Error);
                                 return;
 
                         }
                         break;
                     default:
                         err.err_msg = "operation is not supported between these types";
-                        APPEND((*type_errors), err, Error);
+                        APPEND(tc->semantic_errors, err, Error);
                         return;
                 }
 
             } else {
                 err.err_msg = "operation is only supported between primitive types";
-                APPEND((*type_errors), err, Error);
+                APPEND(tc->semantic_errors, err, Error);
                 return;
             }
+            break;
+        }
         case EQ:
             // check for valid assignment
-            left->as_built_in_type = UNIT_TYPE;
+            expr_type->type_kind = BUILT_IN;
+            expr_type->as_built_in_type = UNIT_TYPE;
+            infer_var_from_assignment(tc, node);
             break;
         default:
             printf("type check not implemented\n");
@@ -118,14 +142,14 @@ void infer_binary_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* no
     node->p_type = expr_type;
 }
 
-void infer_unary_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_unary_expr_type(TypeChecker* tc, ASTNode* node) {
     if (node == NULL) return;
 
     PrimeType* res_t = NULL;
     Error err;
     switch(node->as_un_expr.op->type) {
         case MINUS:
-            infer_expr_type(table, type_errors, node->as_un_expr.operand);
+            infer_expr_type(tc, node->as_un_expr.operand);
             break;
         default:
             err.type = TYPE_ERROR;
@@ -134,18 +158,18 @@ void infer_unary_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* nod
             err.err_len = 1;
             err.err_msg = "operation not supported for this operand type";
 
-            APPEND((*type_errors), err, Error);
+            APPEND(tc->semantic_errors, err, Error);
             return;
     }
     node->p_type = res_t;
 }
 
-void infer_list_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_list_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* base_type = NULL;
     PrimeType* item_t = NULL;
     for (size_t i = 0; i < node->as_list_expr.items.size; i++) {
         ASTNode* item = INDEX_VECTOR(node->as_list_expr.items, ASTNode*, i);
-        infer_expr_type(table, type_errors, item);
+        infer_expr_type(tc, item);
         if (i == 0) {
             base_type = item_t;
         } else if (compare_types(item_t, base_type) == false) {
@@ -155,7 +179,7 @@ void infer_list_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
             err.pos = node->start_tok->pos;
             err.err_len = node->end_tok->index - node->start_tok->index + 1;
             err.err_msg = "list is not of a single uniform type, this expression is not compatible with the list's type";
-            APPEND((*type_errors), err, Error);
+            APPEND(tc->semantic_errors, err, Error);
             return;
         }
     }
@@ -167,24 +191,24 @@ void infer_list_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
 
 }
 
-void infer_block_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_block_type(TypeChecker* tc, ASTNode* node) {
     return;
 }
 
 
-void infer_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_expr_type(TypeChecker* tc, ASTNode* node) {
     switch(node->type) {
         case LITERAL_EXPR: 
-            infer_literal_type(table, type_errors, node);
+            infer_literal_type(tc, node);
             break;
         case LIST_EXPR: 
-            infer_list_type(table, type_errors, node);
+            infer_list_type(tc, node);
             break;
         case UNARY_EXPR: 
-            infer_unary_expr_type(table, type_errors, node);
+            infer_unary_expr_type(tc, node);
             break;
         case BIN_EXPR: 
-            infer_binary_expr_type(table, type_errors, node);
+            infer_binary_expr_type(tc, node);
             break;
        
         default: 
@@ -193,13 +217,13 @@ void infer_expr_type(SymbolTable* table, Vector* type_errors, ASTNode* node) {
     }
 }
 
-void infer_statement(SymbolTable* table, Vector* type_errors, ASTNode* node) {
-    infer_expr_type(table, type_errors, node);
+void infer_statement(TypeChecker* tc, ASTNode* node) {
+    infer_expr_type(tc, node);
 }
 
-void infer_program(SymbolTable* table, Vector* type_errors, ASTNode* node) {
+void infer_program(TypeChecker* tc, ASTNode* node) {
     for (size_t i = 0; i < node->as_compound_statements.size; i++) {
-        infer_statement(table, type_errors, INDEX_VECTOR(node->as_compound_statements, ASTNode*, i));
+        infer_statement(tc, INDEX_VECTOR(node->as_compound_statements, ASTNode*, i));
     }
 }
 

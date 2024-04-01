@@ -1,4 +1,4 @@
-#include "error.h"
+#include "../include/error.h"
 /**
  * formats an error message
 */

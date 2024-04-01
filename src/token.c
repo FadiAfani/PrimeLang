@@ -1,5 +1,5 @@
-#include "token.h"
-#include "memory.h"
+#include "../include/token.h"
+#include "../include/memory.h"
 
 void print_position(Position pos) {
     printf("pos: (%d, %d)\n", pos.row, pos.col);

@@ -1,4 +1,4 @@
-#include "constant_table.h"
+#include "../include/constant_table.h"
 #include <string.h>
 
 void insert_const(ConstTable* table, Const* c) {

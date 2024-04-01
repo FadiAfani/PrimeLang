@@ -1,4 +1,4 @@
-#include "type.h"
+#include "../include/type.h"
 
 void print_type(PrimeType* type) {
     if (type == NULL) return;

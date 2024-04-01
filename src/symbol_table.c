@@ -1,5 +1,5 @@
-#include "symbol_table.h"
-#include "ast_node.h"
+#include "../include/symbol_table.h"
+#include "../include/ast_node.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -10,29 +10,25 @@ static inline float get_load_factor(SymbolTable* table) {
 }
 
 Symbol* lookup(SymbolTable* table, char* key) {
-    SymbolTable* cur = table;
-    while (cur != NULL) {
+    if (table == NULL) return NULL;
     
-        int i = strlen(key) % (table->entries.capacity);
-        for (size_t j = i; j < table->entries.capacity; j++) {
-            Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, i);
-            if (sym == NULL) {
-                cur = table->parent;
-                break;
-            }
-
-            if (strcmp(sym->key, key) == 0) {
-                sym->outer_index = cur->outers_count++;
-                return sym;
-            }
+    int i = strlen(key) % (table->entries.capacity);
+    for (size_t j = i; j < table->entries.capacity; j++) {
+        Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, j);
+        if (sym == NULL) {
+            return NULL;
         }
 
+        if (strcmp(sym->key, key) == 0) {
+            return sym;
+        }
     }
     return NULL;
 }
 
+
 void insert(SymbolTable* table, char* key, Symbol* value) {
-    int i = strlen(key) % (table->entries.size);
+    int i = strlen(key) % (table->entries.capacity);
     value->key = key;
     if (get_load_factor(table) >= LOAD_FACTOR) {
         // refactor
@@ -44,7 +40,7 @@ void insert(SymbolTable* table, char* key, Symbol* value) {
         Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, i);
         if (sym == NULL || strcmp(sym->key, key) == 0) {
             APPEND(table->entries, value, Symbol*);
-            sym->local_index = table->locals_count++;
+            value->local_index = table->locals_count++;
             break;
         }
 

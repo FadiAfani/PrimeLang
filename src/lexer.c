@@ -1,5 +1,5 @@
-#include "lexer.h"
-#include "vector.h"
+#include "../include/lexer.h"
+#include "../include/vector.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -42,7 +42,7 @@ void init_lexer(Lexer* lexer) {
 void print_lexer(Lexer* lexer) {
     print_position(lexer->pos);
     printf("cursor: %d\n", lexer->cursor);
-    printf("num_tokens: %d\n", lexer->tokens.size);
+    printf("num_tokens: %ld\n", lexer->tokens.size);
     for (int i = 0; i < lexer->tokens.size; i++) {
         printf("------------------\n");
         print_token(( (Token*) lexer->tokens.arr)[i]);

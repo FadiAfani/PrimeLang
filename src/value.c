@@ -1,20 +1,10 @@
-#include "value.h"
-#include "memory.h"
+#include "../include/value.h"
+#include "../include/memory.h"
 #include <stdlib.h>
 
 // refactor - this function should return an empty closure
 
-ClosureObj* init_closure(uint8_t* insts, Value* consts, uint16_t n_locals, uint8_t arity) {
-    Obj obj = {OBJ_CLSR};
-    ClosureObj* ptr;
-    ALLOCATE(ptr, ClosureObj, 1);
-    ptr->obj = obj;
-    ptr->insts = insts;
-    ptr->loc_cnt = n_locals;
-    ptr->consts = consts;
-    ptr->arity = arity;
-    return ptr;
-}
+
 
 StringObj* init_string_obj(char* content, uint16_t len) {
     Obj obj = {OBJ_STRING};
@@ -45,6 +35,3 @@ StructObj* init_struct_obj() {
     return struct_obj;
 }
 
-bool valueIsNull (Value val) {
-    return val.type == EMPTY; 
-}

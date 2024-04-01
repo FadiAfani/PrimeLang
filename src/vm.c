@@ -3,11 +3,10 @@
 #include <string.h>
 #include <time.h>
 
-#include "vm.h"
-#include "value.h"
-#include "memory.h"
-#include "prime_file_parser.h"
-#include "hash_table.h"
+#include "../include/vm.h"
+#include "../include/value.h"
+#include "../include/memory.h"
+#include "../include/prime_file_parser.h"
 
 #define READ_BYTE(vm) (vm->code[vm->ip++])
 #define READ_16(vm) (READ_BYTE(vm) | READ_BYTE(vm) << 8)
@@ -176,7 +175,7 @@ void run(VM* vm) {
         }
         case OP_LOADL:
         {
-            uint16_t loc_addr = READ_BYTE(vm) << 8 | READ_BYTE(vm);
+            uint16_t loc_addr = READ_16(vm);
             int fs = vm->stack[vm->fp].as_int;
 
             //printf("bot: %d\n", stack_bottom.as_int);

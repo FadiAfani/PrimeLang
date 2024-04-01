@@ -4,6 +4,7 @@
 #include "lexer.h"
 #include "symbol.h"
 #include "ast_node.h"
+#include "scope.h"
 
 
 
@@ -12,7 +13,7 @@ typedef struct Parser {
     ASTNode* root;
     Vector parsing_errors;
     size_t cursor;
-    SymbolTable global_table;
+    ScopeStack scopes;
 }Parser;
 
 ASTNode* parse_identifier_literal(Parser* parser);

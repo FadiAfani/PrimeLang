@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include "value.h"
-#include "memory.h"
-#include "prime_file_parser.h"
-#include "codegen.h"
+#include "../include/value.h"
+#include "../include/memory.h"
+#include "../include/prime_file_parser.h"
+#include "../include/codegen.h"
 
 #define READ_FILE_16(file) (fgetc(file) | fgetc(file) << 8)
 

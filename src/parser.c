@@ -1,11 +1,10 @@
-#include "parser.h"
-#include "memory.h"
-#include "symbol_table.h"
-#include "vector.h"
-#include "error.h"
-#include "malloc.h"
-#include "semantics.h"
-#include "type.h"
+#include "../include/parser.h"
+#include "../include/memory.h"
+#include "../include/symbol_table.h"
+#include "../include/vector.h"
+#include "../include/error.h"
+#include "../include/type.h"
+#include "../include/scope.h"
 #include <stdbool.h>
 
 #define READ_TOKEN(parser) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor)))
@@ -21,7 +20,7 @@ void init_parser(Parser* parser) {
     parser->parsing_errors = (Vector) {INIT_VECTOR_CAP, 0, NULL};
     ALLOCATE(parser->parsing_errors.arr, Error, INIT_VECTOR_CAP);
     parser->cursor = 0;
-    INIT_SYMBOL_TABLE(parser->global_table);
+    parser->scopes.sp = -1;
 }
 
 void free_ast_node(ASTNode* node) {
@@ -231,6 +230,13 @@ ASTNode* parse_identifier_literal(Parser* parser) {
     } else {
         node->end_tok = tok;
     }
+
+    Symbol* sym;
+    ALLOC_SYMBOL(sym);
+    sym->type = SYMBOL_VARIABLE;
+    sym->outer_index = -1;
+    sym->local_index = -1;
+    insert_top(&parser->scopes, (char*) tok->value.arr, sym);
 
     return node;
 }
@@ -761,7 +767,7 @@ ASTNode* parse_block(Parser* parser) {
     node->type = BLOCK_EXPR;
     node->start_tok = lcurly;
     INIT_SYMBOL_TABLE(node->as_block_expr.table);
-    node->as_block_expr.table.parent = &parser->global_table;
+    push_scope(&parser->scopes, &node->as_block_expr.table);
     bool unclosed = true;
 
     while(READ_TOKEN(parser)->type != TOK_EOF) {
@@ -773,35 +779,6 @@ ASTNode* parse_block(Parser* parser) {
         }
         ASTNode* stmt = parse_statement(parser);
         if (stmt == NULL) return NULL;
-        switch(stmt->type) {
-            case BLOCK_EXPR:
-                stmt->as_block_expr.table.parent = &node->as_block_expr.table;
-                break;
-            case IF_EXPR:
-                if(stmt->as_if_expr.expr->type == BLOCK_EXPR) {
-                    stmt->as_if_expr.expr->as_block_expr.table.parent = &node->as_block_expr.table;
-                }
-                break;
-            case FUNC_DECL:
-            {
-                Symbol* sym;
-                ALLOC_SYMBOL(sym);
-                sym->key = node->as_func_decl.sym_id->value.arr;
-                insert(&node->as_block_expr.table, CAST_VECTOR(stmt->as_func_decl.sym_id->value, char), NULL);
-                stmt->as_func_decl.block->as_block_expr.table.parent = &node->as_block_expr.table;
-                break;
-            }
-            case LITERAL_EXPR:
-                if (stmt->as_literal_expr->type == IDENTIFIER) {
-                    Symbol* sym;
-                    ALLOC_SYMBOL(sym);
-                    sym->key = node->as_id_literal.id_token->value.arr;
-                    insert(&node->as_block_expr.table, CAST_VECTOR(stmt->as_id_literal.id_token->value, char), NULL);
-                }
-                break;
-
-            default: break;
-        }
         APPEND(node->as_compound_statements, stmt, ASTNode*);
         
     }
