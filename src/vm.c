@@ -8,24 +8,6 @@
 #include "../include/memory.h"
 #include "../include/prime_file_parser.h"
 
-#define READ_BYTE(vm) (vm->code[vm->ip++])
-#define READ_16(vm) (READ_BYTE(vm) | READ_BYTE(vm) << 8)
-#define POP(vm) (vm->stack[vm->sp--])
-#define PUSH(vm, value) (vm->stack[++(vm->sp)] = value)
-#define NATIVE_PRINT 0
-#define NATIVE_TIME 1
-
-#define CALL_NATIVE(addr, vm) ({ \
-        switch (addr) { \
-            case NATIVE_PRINT: \
-                break; \
-            case NATIVE_TIME: \
-                break; \
-            default: break; \
-        } \
-})
-
-
 VM* init_VM() {
     VM* vm;
     ALLOCATE(vm, VM, 1);
@@ -34,17 +16,16 @@ VM* init_VM() {
     vm->sp = -1;
     
     /* native functions */
-    NativeFuncObj native_print;
-    native_print.obj = (Obj){OBJ_NATIVE};
-    native_print.arity = 1;
+    NativeFuncObj native_print_int;
+    native_print_int.obj = (Obj){OBJ_NATIVE};
+    native_print_int.arity = MAX_ARITY;
 
     NativeFuncObj native_time;
     native_time.obj = (Obj) {OBJ_NATIVE};
     native_time.arity = 0;
 
-    vm->nativeObjs[0] = native_print;
+    vm->nativeObjs[0] = native_print_int;
     vm->nativeObjs[1] = native_time;
-    memset(vm->stack, 0, 512);
     return vm;
 }
 
@@ -112,9 +93,6 @@ void run(VM* vm) {
         {
             Value a = POP(vm);
             Value b = POP(vm);
-            //printf("a: %f\n", a.number);
-            //printf("b: %f\n", b.number);
-            printf("mult: %d\n", b.as_int * a.as_int);
             PUSH(vm, (Value) {.as_int = b.as_int * a.as_int});
             break;    
         }
@@ -154,8 +132,41 @@ void run(VM* vm) {
         }
         case OP_CALL_NATIVE:
         {
-            uint16_t addr = READ_BYTE(vm);
-            //CALL_NATIVE(addr, vm);
+            uint8_t addr = READ_BYTE(vm);
+            uint8_t args_cnt = READ_BYTE(vm);
+            Value v;
+            switch(addr) {
+                case NATIVE_PRINT:
+                    for (uint8_t i = 0; i < args_cnt; i++) {
+
+                        switch(READ_BYTE(vm)) {
+                            case NATIVE_PRINT_INT:
+                                v = POP(vm);
+                                printf("%d", v.as_int);
+                                break;
+                            case NATIVE_PRINT_DOUBLE:
+                                v = POP(vm);
+                                printf("%lf", v.as_double);
+                                break;
+
+                            case NATIVE_PRINT_STRING:
+                                v = POP(vm);
+                                printf("%s", (char*) v.as_ref);
+                                break;
+                            default:
+                                printf("not a known print variant \n");
+                                exit(EXIT_FAILURE);
+                        }
+                        printf(" ");
+                    }
+                    printf("\n");
+                    break;
+                default:
+                    printf("not a known native function\n");
+                    break;
+                    
+            }
+
             break;
         }
 

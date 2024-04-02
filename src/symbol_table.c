@@ -37,9 +37,9 @@ void insert(SymbolTable* table, char* key, Symbol* value) {
         table->entries.capacity *= SCALE_FACTOR;
     }
     for (size_t j = i; j < table->entries.capacity; j++) {
-        Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, i);
+        Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, j);
         if (sym == NULL || strcmp(sym->key, key) == 0) {
-            APPEND(table->entries, value, Symbol*);
+            INSERT_AT(table->entries, value, Symbol*, j);
             value->local_index = table->locals_count++;
             break;
         }

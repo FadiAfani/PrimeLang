@@ -11,6 +11,17 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define READ_BYTE(vm) (vm->code[vm->ip++])
+#define READ_16(vm) (READ_BYTE(vm) | READ_BYTE(vm) << 8)
+#define POP(vm) (vm->stack[vm->sp--])
+#define PUSH(vm, value) (vm->stack[++(vm->sp)] = value)
+
+#define NATIVE_PRINT 0
+#define NATIVE_PRINT_INT 0
+#define NATIVE_PRINT_DOUBLE 1
+#define NATIVE_PRINT_STRING 2
+#define NATIVE_TIME 3
+
 typedef enum OpCode {
 	OP_HALT,
 	OP_CONST,

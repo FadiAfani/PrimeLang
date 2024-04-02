@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define MAX_ARITY 255
+
 typedef enum ValueType {
 	STRING,
 	NUMBER,

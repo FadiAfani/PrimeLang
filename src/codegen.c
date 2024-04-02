@@ -1,6 +1,7 @@
 #include "../include/codegen.h"
 #include "../include/vector.h"
 #include "../include/memory.h"
+#include "../include/vm.h"
 #include  <stdlib.h>
 #include <string.h>
 
@@ -82,16 +83,38 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
     }
 }
 
+//TODO: refactor, insert print as a symbol during the lexing stage
 void compile_func_call(ASTNode* node, Compiler* compiler) {
-    if (strcmp((char*) node->as_func_call.func_id->value.arr, "print") == 0) {
-        APPEND(compiler->code, OP_CALL_NATIVE, uint8_t);
-        APPEND(compiler->code, 0, uint8_t); /* native function index */
-        return;
-    }
-    Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_call.func_id->value.arr);
+    /* compile args */
     for (size_t i = 0; i < node->as_func_call.params.size; i++) {
         compile_expr(INDEX_VECTOR(node->as_func_call.params, ASTNode*, i), compiler);
     }
+    
+    if (strcmp((char*) node->as_func_call.func_id->value.arr, "print") == 0) {
+        APPEND(compiler->code, OP_CALL_NATIVE, uint8_t);
+        APPEND(compiler->code, NATIVE_PRINT, uint8_t);
+        APPEND(compiler->code, (uint8_t) node->as_func_call.params.size, uint8_t);
+        for (size_t i = 0; i < node->as_func_call.params.size; i++) {
+            ASTNode* arg = INDEX_VECTOR(node->as_func_call.params, ASTNode*, i);
+            switch(arg->p_type->as_built_in_type) {
+                case INT_TYPE:
+                    APPEND(compiler->code, NATIVE_PRINT_INT, uint8_t); 
+                    break;
+                case DOUBLE_TYPE:
+                    APPEND(compiler->code, NATIVE_PRINT_DOUBLE, uint8_t); 
+                    break;
+                case STRING_TYPE:
+                    APPEND(compiler->code, NATIVE_PRINT_STRING, uint8_t); 
+                    break;
+                default:
+                    printf("print is not implemented for this type\n");
+                    exit(EXIT_FAILURE);
+            }
+        }
+        return;
+    }
+    Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_call.func_id->value.arr);
+   
     if (sym->outer_index > 0) {
         APPEND(compiler->code, OP_LOAD_OUTER, uint8_t);
         uint8_t lsbs = 0XFF & sym->outer_index;
@@ -116,29 +139,14 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
 */
 
 void compile_block_expr(ASTNode* node, Compiler* compiler) {
-    Compiler lc;
-    init_compiler(&lc);
+    push_scope(&compiler->scopes, &node->as_block_expr.table);
     for (size_t i = 0; i < node->as_block_expr.statements.size; i++) {
         compile_statement(
                 INDEX_VECTOR(node->as_block_expr.statements, ASTNode*, i),
-                &lc
+                compiler
         );
     }
 
-    size_t insts_size = lc.code.size;
-    MEMCPY_VECTOR(compiler->data, lc.data.arr, lc.data.size, uint8_t); /* copy lc's data to the compiler->data */
-    //MEMCPY_VECTOR_INIT(compiler->data, &node->as_block_expr.table.locals_count, sizeof(uint16_t), uint8_t); /* append number of locals to the code portion */
-    //MEMCPY_VECTOR_INIT(compiler->data, &insts_size, 8, uint8_t); /* append size of the block's instruction section to the*/
-    MEMCPY_VECTOR(compiler->code, lc.code.arr, lc.code.size, uint8_t);
-
-    /**re-hash lc-consts into compiler->consts
-     * using MEMCPY_VECTOR_INIT will scramble the constants' indices so its not an option
-    */
-
-    for (size_t i = 0; i < lc.consts.size; i++) {
-        insert_const(&compiler->consts, INDEX_VECTOR(lc.consts, Const*, i));
-    }  
-    free_compiler(&lc);
 }
 
 void compile_assignment(ASTNode* node, Compiler* compiler) {
@@ -161,11 +169,11 @@ void compile_assignment(ASTNode* node, Compiler* compiler) {
 void compile_binary_expr(ASTNode* node, Compiler* compiler) {
     switch (node->p_type->type_kind) {
         case BUILT_IN:
-            compile_expr(node->as_bin_expr.left, compiler);
-            compile_expr(node->as_bin_expr.right, compiler);
+            
             switch(node->p_type->as_built_in_type) {
                 case INT_TYPE:
-
+                    compile_expr(node->as_bin_expr.left, compiler);
+                    compile_expr(node->as_bin_expr.right, compiler);
                     switch(node->as_bin_expr.op->type) {
                         case MULT:
                             APPEND(compiler->code, OP_MULT_I, uint8_t);
@@ -186,7 +194,8 @@ void compile_binary_expr(ASTNode* node, Compiler* compiler) {
                     }
                     break;
                 case DOUBLE_TYPE:
-
+                    compile_expr(node->as_bin_expr.left, compiler);
+                    compile_expr(node->as_bin_expr.right, compiler);
                     switch(node->as_bin_expr.op->type) {
                         case MULT:
                             APPEND(compiler->code, OP_MULT_F, uint8_t);

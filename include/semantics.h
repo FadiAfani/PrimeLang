@@ -21,6 +21,7 @@ void infer_expr_type(TypeChecker* tc, ASTNode* node);
 void infer_list_type(TypeChecker* tc, ASTNode* node);
 void infer_var_from_assignment(TypeChecker* tc, ASTNode* node);
 void infer_block_type(TypeChecker* tc, ASTNode* node);
+void infer_func_call_type(TypeChecker* tc, ASTNode* node);
 void infer_statement(TypeChecker* tc, ASTNode* node);
 void infer_program(TypeChecker* tc, ASTNode* node);
 

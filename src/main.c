@@ -35,6 +35,7 @@ int main(int argc, char* argv[]) {
     tokenize(&(parser->lexer));
 
     ASTNode* root = parse_program(parser);
+    if (parser->parsing_errors.size > 0) return -1;
     TypeChecker* tc;
     ALLOC_TYPE_CHECKER(tc);
     init_type_checker(tc);

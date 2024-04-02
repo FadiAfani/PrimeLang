@@ -192,7 +192,21 @@ void infer_list_type(TypeChecker* tc, ASTNode* node) {
 }
 
 void infer_block_type(TypeChecker* tc, ASTNode* node) {
+    size_t n = node->as_block_expr.statements.size;
+    ASTNode* last_expr = INDEX_VECTOR(node->as_block_expr.statements, ASTNode*, n - 1);
+    infer_statement(tc, last_expr);
+    node->p_type = last_expr->p_type;
     return;
+}
+
+// TODO: add types for the call expression (its unit type for now)
+void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
+    ALLOC_TYPE(node->p_type);
+    node->p_type->as_built_in_type = UNIT_TYPE;
+    for (uint8_t i = 0; i < node->as_func_call.params.size; i++) {
+        infer_expr_type(tc, INDEX_VECTOR(node->as_func_call.params, ASTNode*, i));
+    }
+
 }
 
 
@@ -210,9 +224,14 @@ void infer_expr_type(TypeChecker* tc, ASTNode* node) {
         case BIN_EXPR: 
             infer_binary_expr_type(tc, node);
             break;
-       
+        case BLOCK_EXPR:
+            infer_block_type(tc, node);
+            break;
+        case FUNC_CALL_EXPR:
+            infer_func_call_type(tc, node);
+            break;
         default: 
-            printf("expression inference not implemented\n");
+            printf("expression inference not implemented for node type: %d\n", node->type);
             break;
     }
 }

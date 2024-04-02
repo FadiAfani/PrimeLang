@@ -237,6 +237,7 @@ ASTNode* parse_identifier_literal(Parser* parser) {
     sym->outer_index = -1;
     sym->local_index = -1;
     insert_top(&parser->scopes, (char*) tok->value.arr, sym);
+    Symbol* s = lookup_symbol(&parser->scopes, tok->value.arr);
 
     return node;
 }
