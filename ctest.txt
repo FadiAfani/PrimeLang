@@ -1,2 +1,5 @@
-x: int = 12
-print(x * 10 + 2)
+f :: (x: int) -> (y: int) -> (z: int) -> int {
+    x + y * z * 4
+}
+
+print(f (3) (9) (7))

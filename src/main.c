@@ -27,23 +27,27 @@ int main(int argc, char* argv[]) {
 	Parser* parser;
     SymbolTable* global_syms;
     ALLOC_SYMBOL_TABLE(global_syms);
-    INIT_SYMBOL_TABLE((*global_syms));
+    init_symbol_table(global_syms);
     ALLOCATE(parser, Parser, 1);
     init_parser(parser);
     push_scope(&parser->scopes, global_syms);
     load_file_into_memory(&(parser->lexer), argv[1]);
     tokenize(&(parser->lexer));
+    //print_lexer(&parser->lexer);
 
     ASTNode* root = parse_program(parser);
-    if (parser->parsing_errors.size > 0) return -1;
+    if (parser->parsing_errors.size > 0)  {
+        for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
+            print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
+        }
+        return -1;
+    }
     TypeChecker* tc;
     ALLOC_TYPE_CHECKER(tc);
     init_type_checker(tc);
     push_scope(&tc->scopes, global_syms);
     infer_program(tc, root);
-    for (size_t i = 0; i < parser->parsing_errors.size; i ++) {
-        print_error(INDEX_VECTOR(parser->parsing_errors, Error, i), parser->lexer.filename, parser->lexer.src);
-    }
+   
     //print_node(root, 0);
     Compiler* compiler;
     ALLOC_COMPILER(compiler);

@@ -18,6 +18,9 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         {
             int num = (int) atof(node->as_literal_expr->value.arr);
 
+            //TODO: fix hashtable problem
+
+
             c->type = INT_CONST;
             c->as_int_const = num;
             c->bytes = (Vector) {INT_CONST_SIZE, 0, NULL};
@@ -69,13 +72,8 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         case IDENTIFIER:
         {
             Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_id_literal.id_token->value.arr);
-            if (sym->outer_index > 0) {
-                APPEND(compiler->code, OP_LOAD_OUTER, uint8_t);
-                MEMCPY_VECTOR(compiler->code, &sym->outer_index, sizeof(uint16_t), uint8_t);
-            } else {
-                APPEND(compiler->code, OP_LOADL, uint8_t);
-                MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
-            }
+            APPEND(compiler->code, OP_LOADL, uint8_t);
+            MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
             break;
 
         }
@@ -85,10 +83,13 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
 
 //TODO: refactor, insert print as a symbol during the lexing stage
 void compile_func_call(ASTNode* node, Compiler* compiler) {
+
     /* compile args */
+    // TODO: fix arg position (not stacked correctly)
     for (size_t i = 0; i < node->as_func_call.params.size; i++) {
         compile_expr(INDEX_VECTOR(node->as_func_call.params, ASTNode*, i), compiler);
     }
+    
     
     if (strcmp((char*) node->as_func_call.func_id->value.arr, "print") == 0) {
         APPEND(compiler->code, OP_CALL_NATIVE, uint8_t);
@@ -96,39 +97,41 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
         APPEND(compiler->code, (uint8_t) node->as_func_call.params.size, uint8_t);
         for (size_t i = 0; i < node->as_func_call.params.size; i++) {
             ASTNode* arg = INDEX_VECTOR(node->as_func_call.params, ASTNode*, i);
-            switch(arg->p_type->as_built_in_type) {
-                case INT_TYPE:
-                    APPEND(compiler->code, NATIVE_PRINT_INT, uint8_t); 
-                    break;
-                case DOUBLE_TYPE:
-                    APPEND(compiler->code, NATIVE_PRINT_DOUBLE, uint8_t); 
-                    break;
-                case STRING_TYPE:
-                    APPEND(compiler->code, NATIVE_PRINT_STRING, uint8_t); 
+            //TODO: handle non-built-ins
+            switch(arg->p_type->type_kind) {
+                case BUILT_IN:
+
+                    switch(arg->p_type->as_built_in_type) {
+                        case INT_TYPE:
+                            APPEND(compiler->code, NATIVE_PRINT_INT, uint8_t); 
+                            break;
+                        case DOUBLE_TYPE:
+                            APPEND(compiler->code, NATIVE_PRINT_DOUBLE, uint8_t); 
+                            break;
+                        case STRING_TYPE:
+                            APPEND(compiler->code, NATIVE_PRINT_STRING, uint8_t); 
+                            break;
+                        default:
+                            printf("print is not implemented for this type\n");
+                            exit(EXIT_FAILURE);
+                    }
                     break;
                 default:
-                    printf("print is not implemented for this type\n");
                     exit(EXIT_FAILURE);
-            }
+                }
         }
         return;
     }
-    Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_call.func_id->value.arr);
+    Const* c = lookup_string_const(&compiler->consts, (char*) node->as_func_call.func_id->value.arr);
+    APPEND(compiler->code, OP_CONST, uint8_t);
+    uint8_t lsbs = 0xFF & c->const_index;
+    uint8_t msbs = c->const_index >> 8;
+    APPEND(compiler->code, lsbs, uint8_t);
+    APPEND(compiler->code, msbs, uint8_t);
    
-    if (sym->outer_index > 0) {
-        APPEND(compiler->code, OP_LOAD_OUTER, uint8_t);
-        uint8_t lsbs = 0XFF & sym->outer_index;
-        uint8_t msbs = 0xFF & (sym->outer_index >> sizeof(uint8_t));
-        APPEND(compiler->code, msbs, uint8_t);
-        APPEND(compiler->code, lsbs, uint8_t);
-    } else {
-        APPEND(compiler->code, OP_LOADL, uint8_t);
-        uint8_t lsbs = 0xFF & sym->local_index;
-        uint8_t msbs = 0XFF & (sym->local_index >> sizeof(uint8_t));
-        APPEND(compiler->code, msbs, uint8_t);
-        APPEND(compiler->code, lsbs, uint8_t);
-    }
     APPEND(compiler->code, OP_CALL, uint8_t);
+
+
 }
 
 /** Block Data Section Structure:
@@ -252,46 +255,64 @@ void compile_expr(ASTNode* node, Compiler* compiler) {
  * */
 
 void compile_function(ASTNode* node, Compiler* compiler) {
+    /* initialize constant */
+    Const* c;
+    ALLOC_CONST(c);
+    INIT_VECTOR(c->bytes, uint8_t);
+    c->as_string_const = (char*) node->as_func_decl.sym_id->value.arr;
+    c->type = FUNC_CONST;
+    insert_const(&compiler->consts, c);
+
     Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_decl.sym_id->value.arr);
     /* compile the function's block */
     Compiler lc;
     init_compiler(&lc);
-    for (size_t i = 0; i < node->as_block_expr.statements.size; i++) {
+    push_scope(&lc.scopes, &node->as_func_decl.block->as_block_expr.table);
+
+
+    lc.consts.size = compiler->consts.size; /* skip the indices already inserted by "compiler"*/
+    ASTNode* block = node->as_func_decl.block;
+    for (size_t i = 0; i < block->as_block_expr.statements.size; i++) {
         compile_statement(
-                INDEX_VECTOR(node->as_block_expr.statements, ASTNode*, i),
+                INDEX_VECTOR(block->as_block_expr.statements, ASTNode*, i),
                 &lc
         );
     }
-    Const* c;
-    ALLOC_CONST(c);
-    c->as_string_const = (char*) node->as_func_decl.sym_id->value.arr;
-    c->type = FUNC_CONST;
-    Vector* ptr = &c->bytes;
-    ALLOC_VECTOR(ptr);
-
-    APPEND(c->bytes, FUNC_TAG, uint8_t); // tag
-    MEMCPY_VECTOR(c->bytes, &c->const_index, sizeof(uint16_t), uint8_t);
-    APPEND(c->bytes, (uint8_t) sym->as_func_symbol.parameters.size, uint8_t); // arity
-    size_t insts_size = lc.code.size;
-    MEMCPY_VECTOR(c->bytes, &node->as_block_expr.table.locals_count, sizeof(uint16_t), uint8_t); /* append number of locals to the code portion */
-    MEMCPY_VECTOR(c->bytes, &insts_size, INSTS_SIZE, uint8_t); /* append size of the block's instruction section to compiler->data */
-    MEMCPY_VECTOR(c->bytes, lc.code.arr, lc.code.size, uint8_t); /* append the block's instructions */
+    APPEND(lc.code, OP_RET, uint8_t);
 
     /**re-hash lc-consts into compiler->consts
      * using MEMCPY_VECTOR_INIT will scramble the constants' indices so its not an option
     */
 
-    for (size_t i = 0; i < lc.consts.size; i++) {
-        insert_const(&compiler->consts, INDEX_VECTOR(lc.consts, Const*, i));
+    for (size_t i = 0; i < lc.consts.capacity; i++) {
+        Const* lc_const = INDEX_VECTOR(lc.consts, Const*, i);
+        if (lc_const != NULL) {
+            insert_const(&compiler->consts, lc_const);
+        }
     }  
 
+
+    APPEND(c->bytes, FUNC_TAG, uint8_t); // tag
+    MEMCPY_VECTOR(c->bytes, &c->const_index, sizeof(uint16_t), uint8_t);
+    APPEND(c->bytes, (uint8_t) node->as_func_decl.parameters.size, uint8_t); // arity
+    size_t insts_size = lc.code.size; /* OP_RET + params * (OP_STORE + INDEX) */
+    MEMCPY_VECTOR(c->bytes, &node->as_func_decl.block->as_block_expr.table.locals_count, sizeof(uint16_t), uint8_t); /* append number of locals to the code portion */
+    MEMCPY_VECTOR(c->bytes, &insts_size, INSTS_SIZE, uint8_t); /* append size of the block's instruction section to compiler->data */
+    MEMCPY_VECTOR(c->bytes, lc.code.arr, lc.code.size, uint8_t); /* append the block's instructions */
+
     free_compiler(&lc);
-    insert_const(&compiler->consts, c);
 }
 
 
 void compile_statement(ASTNode* node, Compiler* compiler) {
-    compile_expr(node, compiler);
+    switch(node->type) {
+        case FUNC_DECL:
+            compile_function(node, compiler);
+            break;
+        default:
+            compile_expr(node, compiler);
+            break;
+    }
 }
 
 /** main entry point */
@@ -326,6 +347,7 @@ void write_compiler_data(char* filename, Compiler* compiler) {
         }
     }
     /* main entry point */
+    APPEND(compiler->code, OP_RET, uint8_t); // return at the end of main
     fputc(FUNC_TAG, out);
     fputc(0, out); // idx byte 1
     fputc(0, out); // idx byte 2
@@ -341,8 +363,7 @@ void write_compiler_data(char* filename, Compiler* compiler) {
 void init_compiler(Compiler* compiler) {
     INIT_VECTOR(compiler->data, uint8_t);
     INIT_VECTOR(compiler->code, uint8_t);
-    INIT_VECTOR(compiler->consts, Const*);
-    memset(compiler->consts.arr, 0, compiler->consts.capacity);
+    init_const_table(&compiler->consts);
     compiler->scopes.sp = -1;
 }
 

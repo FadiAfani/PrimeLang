@@ -27,7 +27,7 @@ ASTNode* parse_and(Parser* parser);
 ASTNode* parse_or(Parser* parser);
 ASTNode* parse_assignment(Parser* parser);
 ASTNode* parse_expr(Parser* parser);
-ASTNode* parse_group_expr(Parser* parser);
+ASTNode* parse_grouped_expr(Parser* parser);
 ASTNode* parse_func_call(Parser* parser);
 ASTNode* parse_unary_expr(Parser* parser);
 ASTNode* parse_primary(Parser* parser);
@@ -42,9 +42,12 @@ ASTNode* parse_comparison(Parser* parser);
 ASTNode* parse_block_based_expr(Parser* parser);
 ASTNode* parse_break_expr(Parser* parser);
 ASTNode* parse_program(Parser* parser);
-Token*   parse_type(Parser* parser);
+ASTNode* parse_param(Parser* parser);
+PrimeType* parse_type_annot(Parser* parser);
+PrimeType*   parse_type(Parser* parser);
 void parse_type_annotation(Parser* parser, ASTNode* node);
 void parse_type_constructor(Parser* parser, ASTNode* node);
+
 
 
 void print_node(ASTNode* node, int depth);

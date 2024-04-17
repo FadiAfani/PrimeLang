@@ -4,9 +4,33 @@
 #include <stdio.h>
 
 
+static void rehash_syms(SymbolTable* table) {
+    table->entries.size = 0;
+    for (size_t i = 0; i < table->entries.capacity; i++) {
+        Symbol** arr = table->entries.arr;
+        if (arr[i] != NULL) {
+            Symbol* sym;
+            ALLOC_SYMBOL(sym);
+            memcpy(sym, arr[i], sizeof(Symbol));
+            //TODO: free symbol
+            arr[i] = NULL;
+            insert(table, sym->key, sym);
+        }
+    }
+}
 
 static inline float get_load_factor(SymbolTable* table) {
     return (float) table->entries.size / table->entries.capacity;
+}
+
+void init_symbol_table(SymbolTable* table) {
+    INIT_VECTOR(table->entries, Symbol*);
+    table->locals_count = 0;
+    table->outers_count = 0;
+    for (size_t i = 0; i < table->entries.capacity; i++) {
+        Symbol** arr = table->entries.arr;
+        arr[i] = NULL;
+    }
 }
 
 Symbol* lookup(SymbolTable* table, char* key) {
@@ -33,18 +57,25 @@ void insert(SymbolTable* table, char* key, Symbol* value) {
     if (get_load_factor(table) >= LOAD_FACTOR) {
         // refactor
         Vector* entries = &(table->entries);
-        REALLOCATE(entries->arr, table->entries.capacity, Symbol);
+        size_t old_cap = table->entries.capacity;
+        REALLOCATE(entries->arr, table->entries.capacity, Symbol*);
         table->entries.capacity *= SCALE_FACTOR;
-    }
-    for (size_t j = i; j < table->entries.capacity; j++) {
-        Symbol* sym = INDEX_VECTOR(table->entries, Symbol*, j);
-        if (sym == NULL || strcmp(sym->key, key) == 0) {
-            INSERT_AT(table->entries, value, Symbol*, j);
-            value->local_index = table->locals_count++;
-            break;
+        for (size_t j = old_cap; j < table->entries.capacity; j++) {
+            Symbol** arr = entries->arr;
+            arr[j] = NULL;
         }
-
+        rehash_syms(table);
     }
+
+    size_t j = i;
+    size_t idx = j;
+    while(INDEX_VECTOR(table->entries, Symbol*, idx) != NULL) {
+        j++;
+        idx = j % table->entries.capacity;
+    }
+    value->local_index = table->locals_count++;
+    INSERT_AT(table->entries, value, Symbol*, idx);
+
 }
 
 void print_symbol(Symbol* symbol) {
@@ -80,6 +111,7 @@ void print_symbol(Symbol* symbol) {
             exit(EXIT_FAILURE);
     }
 }
+
 
 void print_symbol_table(SymbolTable* table) {
     if (table == NULL) return;

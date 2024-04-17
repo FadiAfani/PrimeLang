@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define INIT_VECTOR_CAP 16
+#define INIT_VECTOR_CAP 4
 
 #define CAST_VECTOR(vector, type) ((type*) vector.arr)
 #define INDEX_VECTOR(vector, type, i) (CAST_VECTOR(vector, type)[i])
+
+
 
 #define APPEND(vector, elem, type) ({ \
     if (vector.size >= vector.capacity) { \

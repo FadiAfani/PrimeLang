@@ -4,12 +4,6 @@
 #include "symbol.h"
 #include "memory.h"
 
-#define INIT_SYMBOL_TABLE(table) ({ \
-    INIT_VECTOR(table.entries, Symbol); \
-    table.parent = NULL; \
-    table.outers_count = 0; \
-    table.locals_count = 0; \
-})
 
 #define ALLOC_SYMBOL_TABLE(table) (ALLOCATE(table, SymbolTable, 1))
 
@@ -27,6 +21,6 @@ Symbol* lookup(SymbolTable* table, char* key);
 void insert(SymbolTable* table, char* key, Symbol* value);
 void print_symbol(Symbol* symbol);
 void print_symbol_table(SymbolTable* table);
-
+void init_symbol_table(SymbolTable* table);
 
 #endif

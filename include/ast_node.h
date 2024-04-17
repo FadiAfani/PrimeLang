@@ -5,6 +5,8 @@
 #include "symbol.h"
 #include "symbol_table.h"
 
+#define ALLOC_NODE(ptr) (ALLOCATE(ptr, ASTNode, 1));
+
 typedef enum NodeType {
     BIN_EXPR,
     UNARY_EXPR,
@@ -145,5 +147,7 @@ struct ASTNode {
     NodeType type;
     PrimeType* p_type;
 };
+void init_block(ASTNode* node);
+void init_func_decl(ASTNode* node);
 
 #endif

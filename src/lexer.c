@@ -117,7 +117,9 @@ static void tokenize_id(Lexer* lexer, Token* tok) {
         tok->type = BREAK;
     } else if (strcmp(value, "type") == 0) {
         tok->type = KEYWORD_TYPE;
-    } 
+    } else if(strcmp(value, "int") == 0) {
+        tok->type = TYPE_INT;
+    }
     else {
         tok->type = IDENTIFIER;
     } 

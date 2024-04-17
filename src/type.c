@@ -1,5 +1,21 @@
 #include "../include/type.h"
 
+
+FuncType* get_ret_type(FuncType* ft) {
+    if (ft == NULL) return NULL;
+    FuncType* cur = ft;
+    while (cur->next != NULL) {
+        cur = ft->next;
+    }
+    return cur;
+}
+
+void init_func_type(PrimeType* pt) {
+    ALLOCATE(pt->as_func_type, FuncType, 1);
+    pt->as_func_type->pt = NULL;
+    pt->as_func_type->next = NULL;
+}
+
 void print_type(PrimeType* type) {
     if (type == NULL) return;
 

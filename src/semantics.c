@@ -43,6 +43,7 @@ void infer_literal_type(TypeChecker* tc, ASTNode* node) {
                     err.err_msg = "symbol is not defined";
 
                     APPEND(tc->semantic_errors, err, Error);
+                    return;
 
                 }
                 res = sym->as_var_symbol;
@@ -55,26 +56,32 @@ void infer_literal_type(TypeChecker* tc, ASTNode* node) {
     node->p_type = res;
 }
 
-void infer_var_from_assignment(TypeChecker* tc, ASTNode* node) {
+
+
+static void check_valid_pattern(TypeChecker* tc, ASTNode* node) {
     if (node == NULL) return;
-    ASTNode* var = node->as_bin_expr.left;
-    switch(var->type) {
+    ASTNode* pat = node->as_bin_expr.left;
+    Symbol* sym;
+    switch(pat->type) {
         case LITERAL_EXPR:
-            if (var->as_literal_expr->type != IDENTIFIER) {
-                /* report error */
+            if (pat->as_literal_expr->type != IDENTIFIER) {
+                /* report pattern error */
                 return;
             }
-            Symbol* sym = lookup_symbol(&tc->scopes, (char*) var->as_literal_expr->value.arr);
+            sym = lookup_symbol(&tc->scopes, (char*) pat->as_literal_expr->value.arr);
             infer_expr_type(tc, node->as_bin_expr.right);
             sym->as_var_symbol = node->as_bin_expr.right->p_type;
             break;
+
         default:
-            printf("assignment inference is not implemented for this node type\n");
-            return;
+            printf("unrecognized pattern\n");
+            exit(EXIT_FAILURE);
     }
 }
-
-
+/**
+ * checks if pattern is assignable
+ * modifies the node accordingly 
+*/
 void infer_binary_expr_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* expr_type;
     ALLOC_TYPE(expr_type);
@@ -105,9 +112,11 @@ void infer_binary_expr_type(TypeChecker* tc, ASTNode* node) {
                         switch(right->as_built_in_type) {
                             case INT_TYPE:
                                 expr_type->as_built_in_type = INT_TYPE;
+                                expr_type->type_kind = BUILT_IN;
                                 break;
                             case DOUBLE_TYPE:
                                 expr_type->as_built_in_type = DOUBLE_TYPE;
+                                expr_type->type_kind = BUILT_IN;
                                 break;
                             default:
                                 err.err_msg = "operation is not supported between these types";
@@ -133,7 +142,7 @@ void infer_binary_expr_type(TypeChecker* tc, ASTNode* node) {
             // check for valid assignment
             expr_type->type_kind = BUILT_IN;
             expr_type->as_built_in_type = UNIT_TYPE;
-            infer_var_from_assignment(tc, node);
+            check_valid_pattern(tc, node);
             break;
         default:
             printf("type check not implemented\n");
@@ -192,6 +201,7 @@ void infer_list_type(TypeChecker* tc, ASTNode* node) {
 }
 
 void infer_block_type(TypeChecker* tc, ASTNode* node) {
+    push_scope(&tc->scopes, &node->as_block_expr.table);
     size_t n = node->as_block_expr.statements.size;
     ASTNode* last_expr = INDEX_VECTOR(node->as_block_expr.statements, ASTNode*, n - 1);
     infer_statement(tc, last_expr);
@@ -199,12 +209,29 @@ void infer_block_type(TypeChecker* tc, ASTNode* node) {
     return;
 }
 
-// TODO: add types for the call expression (its unit type for now)
 void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
+    if (strncmp(node->as_func_call.func_id->value.arr, "print", 5) == 0) {
+        for (uint8_t i = 0; i < node->as_func_call.params.size; i++) {
+            infer_expr_type(tc, INDEX_VECTOR(node->as_func_call.params, ASTNode*, i));
+        }
+        return;
+    }
     ALLOC_TYPE(node->p_type);
-    node->p_type->as_built_in_type = UNIT_TYPE;
+    Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_func_call.func_id->value.arr);
+    if (sym == NULL) {
+        //TODO: report error
+        return;
+    }
+    FuncType* res_t = sym->as_func_symbol.func_type->as_func_type;
     for (uint8_t i = 0; i < node->as_func_call.params.size; i++) {
-        infer_expr_type(tc, INDEX_VECTOR(node->as_func_call.params, ASTNode*, i));
+        ASTNode* p = INDEX_VECTOR(node->as_func_call.params, ASTNode*, i);
+        infer_expr_type(tc, p);
+        res_t = res_t->next;
+    }
+    if (res_t->next == NULL) {
+        node->p_type = res_t->pt;
+    } else {
+        node->p_type->as_func_type = res_t;
     }
 
 }
@@ -231,13 +258,20 @@ void infer_expr_type(TypeChecker* tc, ASTNode* node) {
             infer_func_call_type(tc, node);
             break;
         default: 
-            printf("expression inference not implemented for node type: %d\n", node->type);
+            printf("expression inference not implemented for this node type: %d\n", node->type);
             break;
     }
 }
 
 void infer_statement(TypeChecker* tc, ASTNode* node) {
-    infer_expr_type(tc, node);
+    switch(node->type) {
+        case FUNC_DECL:
+            infer_block_type(tc, node->as_func_decl.block);
+            break;
+        default:
+            infer_expr_type(tc, node);
+            break;
+    }
 }
 
 void infer_program(TypeChecker* tc, ASTNode* node) {

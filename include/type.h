@@ -3,6 +3,7 @@
 
 #include "memory.h"
 #include "vector.h"
+#include "token.h"
 
 typedef enum BuiltInType {
     INT_TYPE,
@@ -24,19 +25,28 @@ typedef enum PrimeTypeKind {
 
 typedef struct PrimeType PrimeType;
 
+typedef struct FuncType FuncType;
+
+
 struct PrimeType {
     union {
         BuiltInType as_built_in_type;
-        Vector as_func_type; // vector of PrimeType*
+        FuncType* as_func_type; // vector of PrimeType*
         PrimeType* as_list_type;
         char* as_user_defined_type;
     };
     PrimeTypeKind type_kind;
 };
 
+struct FuncType {
+    PrimeType* pt;
+    FuncType* next;
+};
 
 #define ALLOC_TYPE(ptr) (ALLOCATE(ptr, PrimeType, 1))
 
 void print_type(PrimeType* p_type);
+FuncType* get_ret_type(FuncType* ft);
+void init_func_type(PrimeType* pt);
 
 #endif

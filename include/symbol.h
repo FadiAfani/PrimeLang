@@ -11,7 +11,8 @@ typedef enum SymbolType {
     SYMBOL_TYPE,
     SYMBOL_VARIABLE,
     SYMBOL_FUNCTION,
-    SYMBOL_ENUM
+    SYMBOL_ENUM,
+    SYMBOL_PARAMETER
 
 }SymbolType;
 
@@ -38,6 +39,12 @@ typedef struct Symbol {
     int local_index;
     SymbolType type;
 }Symbol;
+
+#define INIT_FUNC_SYMBOL(fs) ({ \
+    INIT_VECTOR(fs.parameters, Symbol*); \
+    ALLOC_TYPE(fs.func_type); \
+})
+
 
 #define ALLOC_SYMBOL(ptr) (ALLOCATE(ptr, Symbol, 1))
 

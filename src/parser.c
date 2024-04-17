@@ -8,7 +8,7 @@
 #include <stdbool.h>
 
 #define READ_TOKEN(parser) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor)))
-#define PEEK_AT(parser, i) (((Token*) (parser->lexer.tokens.arr))[parser->cursor + i])
+#define PEEK_AT(parser, i) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor + 1)))
 #define PEEK_NEXT(parser) (PEEK_AT(parser, 1))
 
 
@@ -38,7 +38,6 @@ void free_ast_node(ASTNode* node) {
             }
             break;
         default:
-            printf("free is not implemented for this node type\n");
             return;
     }
     free(node);
@@ -175,37 +174,6 @@ static bool consume(Parser* parser, TokenType token_type) {
     return false;
 }
 
-void parse_type_annotation(Parser* parser, ASTNode* node) {
-    Token* fst_type = parse_type(parser);
-    if (fst_type == NULL) {
-        APPEND(
-            parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            node->start_tok->index - node->start_tok->pos.col + 1, 
-            node->end_tok->pos, 
-            node->end_tok->value.size,
-            "expected a type" }),
-            Error
-        );
-        return;
-
-    }
-    Vector* vec;
-    ALLOCATE(vec, Vector, 1);
-    INIT_VECTOR((*vec), ASTNode*);
-    APPEND((*vec), fst_type, Token*);
-
-    while(consume(parser, ARROW)) {
-        APPEND((*vec), parse_type(parser), Token*);
-    }
-
-    if (vec->size == 0) {
-        free_vector(vec);
-        node->as_id_literal.id_type = NULL;
-    } else {
-        node->as_id_literal.id_type = vec;
-    }
-}
 
 ASTNode* parse_identifier_literal(Parser* parser) {
 
@@ -214,30 +182,12 @@ ASTNode* parse_identifier_literal(Parser* parser) {
     ASTNode* node;
     ALLOCATE(node, ASTNode, 1);
     node->start_tok = tok;
+    node->end_tok = tok;
     node->as_id_literal.id_token = tok;
     node->as_id_literal.id_type = NULL;
     node->type = LITERAL_EXPR;
 
     Token* colon = READ_TOKEN(parser);
-    if (consume(parser, COLON)) {
-        node->end_tok = colon;
-        parse_type_annotation(parser, node);
-    }
-
-    // get last token from the type vector
-    if (node->as_id_literal.id_type != NULL) {
-        node->end_tok = INDEX_VECTOR((*node->as_id_literal.id_type), ASTNode*, node->as_id_literal.id_type->size - 1)->end_tok;
-    } else {
-        node->end_tok = tok;
-    }
-
-    Symbol* sym;
-    ALLOC_SYMBOL(sym);
-    sym->type = SYMBOL_VARIABLE;
-    sym->outer_index = -1;
-    sym->local_index = -1;
-    insert_top(&parser->scopes, (char*) tok->value.arr, sym);
-    Symbol* s = lookup_symbol(&parser->scopes, tok->value.arr);
 
     return node;
 }
@@ -617,7 +567,6 @@ ASTNode* parse_func_call(Parser* parser) {
     consume(parser, IDENTIFIER);
 
     Token* lparen = READ_TOKEN(parser);
-    if (!consume(parser, LPAREN)) return NULL;
 
     ASTNode* node = NULL;
     ALLOCATE(node, ASTNode, 1);
@@ -626,7 +575,7 @@ ASTNode* parse_func_call(Parser* parser) {
     node->type = FUNC_CALL_EXPR;
     node->as_func_call.func_id = id_tok;
     INIT_VECTOR(node->as_func_call.params, ASTNode*);
-    ASTNode* arg = parse_expr(parser);
+    ASTNode* arg = parse_grouped_expr(parser);
     if (arg == NULL) {
         APPEND(parser->parsing_errors,
             ((Error) {SYNTAX_ERROR,
@@ -641,46 +590,103 @@ ASTNode* parse_func_call(Parser* parser) {
     }
     APPEND(node->as_func_call.params, arg, ASTNode*);
 
-    while(READ_TOKEN(parser)->type != TOK_EOF) {
+    while(READ_TOKEN(parser)->type == LPAREN) {
         Token* tok = READ_TOKEN(parser);
-        if (consume(parser, COMMA)) {
-            arg = parse_expr(parser);
-            if (arg == NULL) {
-                APPEND(parser->parsing_errors,
-                    ((Error) {SYNTAX_ERROR,
-                    node->start_tok->index - node->start_tok->pos.col + 1, 
-                    tok->pos, 
-                    tok->value.size, 
-                    "expected an expression after ','"}),
-                    Error
-                );
-                free_ast_node(node);
-                return NULL;
-            }
-            APPEND(node->as_func_call.params, arg, ASTNode*);
-        } else {
-            break;
-        }
+        arg = parse_grouped_expr(parser);
+        APPEND(node->as_func_call.params, arg, ASTNode*);
     }
 
-    Token* rparen = READ_TOKEN(parser);
-    if (!consume(parser, RPAREN)) {
-
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            node->start_tok->index - node->start_tok->pos.col + 1, 
-            lparen->pos, 
-            lparen->value.size, 
-            "unclosed delimiter, expected a ')' at the end of the function call"}),
-            Error
-            );
-        free_ast_node(node);
-        return NULL;
-    }
 
     return node;
 
 }
+
+PrimeType* parse_type_annot(Parser* parser) {
+    PrimeType* t = parse_type(parser);
+    if (t == NULL) {
+        //TODO: report error and free
+        return NULL;
+    }
+    FuncType* ft;
+    ALLOCATE(ft, FuncType, 1);
+    ft->pt = t;
+    while(READ_TOKEN(parser)->type == ARROW) {
+        consume(parser, ARROW);
+        ft->pt = parse_type(parser);
+    }
+
+    t->type_kind = FUNC_KIND;
+    t->as_func_type = ft;
+
+    return t;
+
+}
+
+ASTNode* parse_func_decl(Parser* parser) {
+    Token* id = READ_TOKEN(parser);
+    if (!consume(parser, IDENTIFIER)) return NULL;
+    if (!consume(parser, DOUBLE_COLON)) return NULL;
+
+    ASTNode* node;
+    ALLOC_NODE(node);
+    INIT_VECTOR(node->as_func_decl.parameters, ASTNode*);
+    node->as_func_decl.sym_id = id;
+    node->type = FUNC_DECL;
+    node->p_type = NULL;
+
+    // init FuncType
+    PrimeType* func_t;
+    ALLOC_TYPE(func_t);
+    ALLOCATE(func_t->as_func_type, FuncType, 1);
+
+    // parse parameters
+    ASTNode* p = parse_param(parser);
+    APPEND(node->as_func_decl.parameters, p, ASTNode*);
+    while (READ_TOKEN(parser)->type == ARROW && PEEK_NEXT(parser)->type == LPAREN) {
+        consume(parser, ARROW);
+        p = parse_param(parser);
+        APPEND(node->as_func_decl.parameters, p, ASTNode*);
+    }
+
+    if (!consume(parser, ARROW)) {
+        // TODO: report error and free memory
+        return NULL;
+    }
+
+    PrimeType* ret_t = parse_type_annot(parser);
+    if (ret_t == NULL) {
+        //TODO: report error
+        return NULL;
+    }
+    node->as_func_decl.block = parse_block(parser);
+    Symbol* sym;
+    ALLOC_SYMBOL(sym);
+    INIT_FUNC_SYMBOL(sym->as_func_symbol);
+    sym->type = SYMBOL_FUNCTION;
+    insert_top(&parser->scopes, (char*) id->value.arr, sym);
+    FuncType* cur_ft = func_t->as_func_type;
+    for (size_t i = 0; i < node->as_func_decl.parameters.size; i++) {
+        Symbol* ps;
+        ALLOC_SYMBOL(ps);
+        ps->type = SYMBOL_PARAMETER;
+        ASTNode* id_node = INDEX_VECTOR(node->as_func_decl.parameters, ASTNode*, i);
+        ps->as_var_symbol = id_node->p_type;
+        FuncType* next;
+        ALLOCATE(next, FuncType, 1);
+        next->pt = id_node->p_type;
+        cur_ft->next = next;
+        cur_ft = next;
+        insert(&node->as_func_decl.block->as_block_expr.table, (char*) id_node->as_literal_expr->value.arr, ps);
+
+    }
+    cur_ft->next = NULL;
+    func_t->type_kind = FUNC_KIND;
+    sym->as_func_symbol.func_type = func_t;
+
+    return node;
+
+    }
+
 
 ASTNode* parse_list_index(Parser* parser) {
     ASTNode* id = parse_identifier_literal(parser);
@@ -727,9 +733,9 @@ ASTNode* parse_primary(Parser* parser) {
     Token* tok = READ_TOKEN(parser);
     switch(READ_TOKEN(parser)->type) {
         case IDENTIFIER:
-            if (PEEK_NEXT(parser).type == LPAREN) {
+            if (PEEK_NEXT(parser)->type == LPAREN) {
                 return parse_func_call(parser);
-            } else if (PEEK_NEXT(parser).type == LBRAC) {
+            } else if (PEEK_NEXT(parser)->type == LBRAC) {
                 return parse_list_index(parser);
             }
             return parse_identifier_literal(parser);
@@ -767,7 +773,7 @@ ASTNode* parse_block(Parser* parser) {
     INIT_VECTOR(node->as_compound_statements, ASTNode*);
     node->type = BLOCK_EXPR;
     node->start_tok = lcurly;
-    INIT_SYMBOL_TABLE(node->as_block_expr.table);
+    init_symbol_table(&node->as_block_expr.table);
     push_scope(&parser->scopes, &node->as_block_expr.table);
     bool unclosed = true;
 
@@ -797,6 +803,8 @@ ASTNode* parse_block(Parser* parser) {
         free_ast_node(node);
         return NULL;
     }
+
+    pop_scope(&parser->scopes);
 
 
     return node;
@@ -1006,16 +1014,40 @@ ASTNode* parse_comparison(Parser* parser) {
     return node;
 }
 
-Token* parse_type(Parser* parser) {
+PrimeType* parse_type(Parser* parser) {
     Token* tok = READ_TOKEN(parser);
+    PrimeType* t;
+    ALLOC_TYPE(t);
     switch (tok->type) {
         case TYPE_INT:
+            t->as_built_in_type = INT_TYPE;
+            t->type_kind = BUILT_IN;
+            consume(parser, TYPE_INT);
+            break;
         case TYPE_DOUBLE:
+            t->as_built_in_type = DOUBLE_TYPE;
+            t->type_kind = BUILT_IN;
+            consume(parser, TYPE_DOUBLE);
+            break;
         case TYPE_STRING:
+            t->as_built_in_type = STRING_TYPE;
+            t->type_kind = BUILT_IN;
+            consume(parser, TYPE_STRING);
+            break;
         case TYPE_BOOL:
+            t->as_built_in_type = BOOL_TYPE;
+            t->type_kind = BUILT_IN;
+            consume(parser, TYPE_BOOL);
+            break;
         case UNIT:
+            t->as_built_in_type = UNIT_TYPE;
+            t->type_kind = BUILT_IN;
+            consume(parser, UNIT);
+            break;
         case IDENTIFIER:
-            parser->cursor++;
+            t->as_user_defined_type = (char*) tok->value.arr;
+            t->type_kind = USER_DEFINED;
+            consume(parser, IDENTIFIER);
             break;
         case TOK_EOF: return NULL;
         default:
@@ -1031,159 +1063,44 @@ Token* parse_type(Parser* parser) {
             parser->cursor++;
             return NULL;
     }
-    return tok;
+    return t;
 }
 
-void parse_type_constructor(Parser* parser, ASTNode* node) {
-    Token* const_id = READ_TOKEN(parser);
-    if (const_id == NULL) return;
-    
-    APPEND(node->as_type_decl.enums, const_id, Token*);
-    if (!consume(parser, LPAREN)) {
-        // no inner types / sub-types to parse
-        // append a null representing no inner types
-        APPEND(node->as_type_decl.inner_types, NULL, Token*);
-        return;
+
+ASTNode* parse_param(Parser* parser) {
+    if (!consume(parser, LPAREN)) return NULL;
+    Token* t = READ_TOKEN(parser);
+    if (!consume(parser, IDENTIFIER)) {
+        //TODO: report an error
+        return NULL;
     }
-    Token* fst_type = parse_type(parser);
-    if (fst_type == NULL) {
-        Token* tok = READ_TOKEN(parser);
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            tok->index - tok->pos.col + 1, 
-            tok->pos, 
-            tok->value.size, 
-            "unexpected symbol"}),
-            Error
-        );
-        return;
-    }
-    Vector* inner_types;
-    ALLOCATE(inner_types, ASTNode, 1);
-    INIT_VECTOR((*inner_types), ASTNode);
-    APPEND((*inner_types), fst_type, Token*);
-    while (consume(parser, COMMA)) {
-        Token* tok = READ_TOKEN(parser);
-        APPEND((*inner_types), parse_type(parser), Token*);
+    if (!consume(parser, COLON)) {
+        //TODO: report an error
+        return NULL;
     }
 
+    PrimeType* pt = parse_type(parser);
     if (!consume(parser, RPAREN)) {
-        //report error and free memory
-        Token* tok = READ_TOKEN(parser);
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            tok->index - tok->pos.col + 1, 
-            tok->pos, 
-            tok->value.size, 
-            "expected a ')' after an enum"}),
-            Error
-        );
-
-        free_ast_node(node);
-        return;
-    }
-
-    APPEND(node->as_type_decl.inner_types, inner_types, Vector*);
-}
-
-ASTNode* parse_type_decl(Parser* parser) {
-    consume(parser, KEYWORD_TYPE);
-    Token* type_id = READ_TOKEN(parser);
-    if (!consume(parser, IDENTIFIER)) return NULL;
-
-    if (!consume(parser, EQ)) {
-        Token* tok = READ_TOKEN(parser);
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            tok->index - tok->pos.col + 1, 
-            tok->pos, 
-            tok->value.size, 
-            "expected a '=' after a type identifier"}),
-            Error
-        );
+        //TODO: report error and free pt
         return NULL;
     }
 
     ASTNode* node;
-    ALLOCATE(node, ASTNode, 1);
-    node->type = TYPE_DECL;
-    node->as_type_decl.sym_id = type_id;
-    INIT_VECTOR(node->as_type_decl.enums, Token);
-    INIT_VECTOR(node->as_type_decl.inner_types, Vector);
-
-    parse_type_constructor(parser, node);
-    while (consume(parser, PIPE)) {
-        parse_type_constructor(parser, node);
-    }
+    ALLOC_NODE(node);
+    node->as_literal_expr= t;
+    node->p_type = pt;
+    node->type = IDENTIFIER;
 
     return node;
-
-}
-
-void parse_func_param(Parser* parser, ASTNode* node) {
-    Token* tok = READ_TOKEN(parser);
-    if (consume(parser, LPAREN)) {
-        APPEND(node->as_func_decl.parameters, parse_identifier_literal(parser), ASTNode*);
-        if (!consume(parser, RPAREN)) {
-
-            APPEND(parser->parsing_errors,
-                ((Error) {SYNTAX_ERROR,
-                node->start_tok->index - node->start_tok->pos.col + 1, 
-                tok->pos, 
-                tok->value.size, 
-                "a parameter should be container within parentheses '(...)'"}),
-                Error
-            );
-            return;
-        }
-    } else if (consume(parser, UNIT)) {
-        APPEND(node->as_func_decl.parameters, parse_type(parser), Token*);
-    } else {
-
-        APPEND(parser->parsing_errors,
-            ((Error) {SYNTAX_ERROR,
-            node->start_tok->index - node->start_tok->pos.col + 1, 
-            tok->pos, 
-            tok->value.size, 
-            "a parameter should be container within parentheses '(...)'"}),
-            Error
-        );
-        parser->cursor++;
-        return;
-    }
-}
-
-ASTNode* parse_func_decl(Parser* parser) {
-    Token* func_id = READ_TOKEN(parser);
-    if (!consume(parser, IDENTIFIER)) return NULL;
-    if (!consume(parser, DOUBLE_COLON)) return NULL;
-
-    ASTNode* node;
-    ALLOCATE(node, ASTNode, 1);
-    INIT_VECTOR(node->as_func_decl.parameters, ASTNode*);
-    node->as_func_decl.sym_id = func_id;
-    node->type = FUNC_DECL;
-    node->start_tok = func_id;
-    node->end_tok = node->start_tok; // set end_tok to start_tok before parsing params
-
-    parse_func_param(parser, node);
-    while(consume(parser, ARROW)) {
-        parse_func_param(parser, node);
-    }
-
-    node->as_func_decl.block = parse_block(parser);
-    if (node->as_func_decl.block != NULL) {
-        node->end_tok = node->as_func_decl.block->start_tok;
-    }
-
-    return node;
-
 }
 
 
 ASTNode* parse_assignment(Parser* parser) {
     ASTNode* left = parse_comparison(parser);
     if (left == NULL) return NULL;
+    if (consume(parser, COLON)) {
+        left->p_type = parse_type(parser);
+    }
     Token* eq = READ_TOKEN(parser);
     if (!consume(parser, EQ)) {
         return left;
@@ -1221,6 +1138,16 @@ ASTNode* parse_expr(Parser* parser) {
     return node;
 }
 
+ASTNode* parse_grouped_expr(Parser* parser) {
+    if (!consume(parser, LPAREN)) return NULL;
+    ASTNode* expr = parse_expr(parser);
+    if (!consume(parser, RPAREN)) {
+        free_ast_node(expr);
+        return NULL;
+    }
+    return expr;
+}
+
 ASTNode* parse_break_expr(Parser* parser) {
     Token* tok = READ_TOKEN(parser);
     consume(parser, BREAK);
@@ -1239,17 +1166,12 @@ ASTNode* parse_break_expr(Parser* parser) {
 }
 
 
+
 ASTNode* parse_statement(Parser* parser) {
-    switch(READ_TOKEN(parser)->type) {
-        case KEYWORD_TYPE:
-            return parse_type_decl(parser);
-        default:
-            break;
-        
-    }
-    if (READ_TOKEN(parser)->type == IDENTIFIER && PEEK_NEXT(parser).type == DOUBLE_COLON) {
+    if (READ_TOKEN(parser)->type == IDENTIFIER && PEEK_NEXT(parser)->type == DOUBLE_COLON) {
         return parse_func_decl(parser);
     }
+   
     ASTNode* node = parse_expr(parser);
     return node;
 }
@@ -1270,6 +1192,7 @@ ASTNode* parse_compound(Parser* parser) {
 ASTNode* parse_program(Parser* parser) {
     ASTNode* node = parse_compound(parser);
     node->type = PROGRAM;
+    return node;
 }
 
 
