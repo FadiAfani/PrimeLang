@@ -18,15 +18,13 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         {
             int num = (int) atof(node->as_literal_expr->value.arr);
 
-            //TODO: fix hashtable problem
-
-
             c->type = INT_CONST;
             c->as_int_const = num;
             c->bytes = (Vector) {INT_CONST_SIZE, 0, NULL};
             ALLOCATE(c->bytes.arr, uint8_t, INT_CONST_SIZE);
 
-            insert_const(&compiler->consts, c);
+            c->const_index = compiler->consts.size + 1;
+            insert(&compiler->consts, &num, c, sizeof(int));
             APPEND(c->bytes, INT_TAG, uint8_t);
             MEMCPY_VECTOR(c->bytes, &c->const_index, sizeof(uint16_t), uint8_t);
             MEMCPY_VECTOR(c->bytes, &num, sizeof(int), uint8_t);
@@ -42,7 +40,8 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
             c->bytes = (Vector) {DOUBLE_CONST_SIZE, 0, NULL};
             ALLOCATE(c->bytes.arr, uint8_t, DOUBLE_CONST_SIZE);
 
-            insert_const(&compiler->consts, c);
+            c->const_index = compiler->consts.size + 1;
+            insert(&compiler->consts, &num, c, sizeof(double));
             APPEND(c->bytes, DOUBLE_TAG, uint8_t);
             MEMCPY_VECTOR(c->bytes, &c->const_index, sizeof(uint16_t), uint8_t);
             MEMCPY_VECTOR(c->bytes, &num, sizeof(double), uint8_t);
@@ -60,7 +59,8 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
             c->bytes = (Vector) {bytes_size, 0, NULL};
             ALLOCATE(c->bytes.arr, uint8_t, bytes_size);
 
-            insert_const(&compiler->consts, c);
+            c->const_index = compiler->consts.size + 1;
+            insert(&compiler->consts, str, c, node->as_literal_expr->value.size);
             APPEND(c->bytes, STRING_TAG, uint8_t);
             MEMCPY_VECTOR(c->bytes, &c->const_index, sizeof(uint16_t), uint8_t);
             MEMCPY_VECTOR(c->bytes, ((uint16_t*) node->as_literal_expr->value.size), sizeof(uint16_t), uint8_t);
@@ -71,7 +71,7 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         }
         case IDENTIFIER:
         {
-            Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_id_literal.id_token->value.arr);
+            Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_id_literal.id_token->value.arr, node->as_id_literal.id_token->value.size);
             APPEND(compiler->code, OP_LOADL, uint8_t);
             MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
             break;
@@ -122,7 +122,7 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
         }
         return;
     }
-    Const* c = lookup_string_const(&compiler->consts, (char*) node->as_func_call.func_id->value.arr);
+    Const* c = lookup(&compiler->consts, (char*) node->as_func_call.func_id->value.arr, node->as_func_call.func_id->value.size);
     APPEND(compiler->code, OP_CONST, uint8_t);
     uint8_t lsbs = 0xFF & c->const_index;
     uint8_t msbs = c->const_index >> 8;
@@ -157,7 +157,7 @@ void compile_assignment(ASTNode* node, Compiler* compiler) {
         case LITERAL_EXPR:
         {
             compile_expr(node->as_bin_expr.right, compiler);
-            Symbol* sym = lookup_symbol(&compiler->scopes, node->as_bin_expr.left->as_literal_expr->value.arr);
+            Symbol* sym = lookup_symbol(&compiler->scopes, node->as_bin_expr.left->as_literal_expr->value.arr, node->as_bin_expr.left->as_literal_expr->value.size);
             APPEND(compiler->code, OP_STOREL, uint8_t);
             MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
             break;
@@ -261,9 +261,10 @@ void compile_function(ASTNode* node, Compiler* compiler) {
     INIT_VECTOR(c->bytes, uint8_t);
     c->as_string_const = (char*) node->as_func_decl.sym_id->value.arr;
     c->type = FUNC_CONST;
-    insert_const(&compiler->consts, c);
+    c->const_index = compiler->consts.size + 1;
+    insert(&compiler->consts, &c->as_string_const, c, node->as_func_decl.sym_id->value.size);
 
-    Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_decl.sym_id->value.arr);
+    Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_decl.sym_id->value.arr, node->as_func_decl.sym_id->value.size);
     /* compile the function's block */
     Compiler lc;
     init_compiler(&lc);
@@ -285,9 +286,11 @@ void compile_function(ASTNode* node, Compiler* compiler) {
     */
 
     for (size_t i = 0; i < lc.consts.capacity; i++) {
-        Const* lc_const = INDEX_VECTOR(lc.consts, Const*, i);
+        Entry* lc_const = lc.consts.arr[i];
         if (lc_const != NULL) {
-            insert_const(&compiler->consts, lc_const);
+            /* treat the key as a sequence of chars hence the 'as_string_const */
+            c->const_index = compiler->consts.size + 1;
+            insert(&compiler->consts, ((Const*) lc_const->value)->as_string_const, lc_const->value, lc_const->size);
         }
     }  
 
@@ -341,8 +344,9 @@ void write_compiler_data(char* filename, Compiler* compiler) {
     uint16_t consts_size = (uint16_t) compiler->consts.size + 1; // +1 for the main entry point
     fwrite(&consts_size, 1, sizeof(consts_size), out);
     for (int i = 0; i < compiler->consts.capacity; i++) {
-        Const* c = INDEX_VECTOR(compiler->consts, Const*, i);
-        if (c != NULL) {
+        Entry* e = compiler->consts.arr[i];
+        if (e != NULL) {
+            Const* c = e->value;
             fwrite(c->bytes.arr, 1, c->bytes.size, out);
         }
     }
@@ -363,7 +367,7 @@ void write_compiler_data(char* filename, Compiler* compiler) {
 void init_compiler(Compiler* compiler) {
     INIT_VECTOR(compiler->data, uint8_t);
     INIT_VECTOR(compiler->code, uint8_t);
-    init_const_table(&compiler->consts);
+    init_hash_table(&compiler->consts);
     compiler->scopes.sp = -1;
 }
 

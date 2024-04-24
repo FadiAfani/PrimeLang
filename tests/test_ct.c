@@ -1,10 +1,11 @@
+#include "../include/hash_table.h"
 #include "../include/constant_table.h"
 #include "criterion/criterion.h"
 
-ConstTable table;
+HashTable table;
 
 void setup(void) {
-    init_const_table(&table);
+    init_hash_table(&table);
 }
 
 void teardown(void) {
@@ -19,7 +20,7 @@ Test(constant_table_tests, test_insertion) {
     ALLOC_CONST(c);
     c->type = INT_CONST;
     c->as_int_const = 4;
-    insert_const(&table, c);
+    insert(&table, &c->as_int_const, c, sizeof(int));
     cr_expect(table.size == prev_size + 1, "insertion error");
 }
 
@@ -31,14 +32,27 @@ Test(constant_table_tests, insert_multiple) {
         ALLOC_CONST(c);
         c->as_int_const = i;
         c->type = INT_CONST;
-        insert_const(&table, c);
+        insert(&table, &c->as_int_const, c, sizeof(int));
     }
+
+    printf("size: %d", table.size);
     cr_expect(table.size == prev_size + n, "some constants were wrongly inserted or overwritten");
 }
 
 Test(constant_table_tests, test_reshash) {
     size_t prev_size = table.size;
-    rehash_consts(&table);
+    rehash(&table);
     cr_expect(prev_size == table.size, "rehashing failed, size difference recorded");
     
+}
+
+Test(constant_table_tests, test_lookup) {
+    int key = 32;
+    Const* c;
+    ALLOC_CONST(c);
+    c->type = INT_CONST;
+    c->as_int_const = key;
+    insert(&table, &key, c, sizeof(int)); 
+    Const* res = lookup(&table, &key, sizeof(int));
+    cr_expect(res != NULL, "lookup function failed");
 }

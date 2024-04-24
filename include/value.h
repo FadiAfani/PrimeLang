@@ -26,15 +26,6 @@ typedef union {
 }Value;
 
 
-typedef struct {
-    int key;
-    Value val;
-}HashTableEntry;
-
-typedef struct {
-    uint16_t capacity;
-    HashTableEntry* table;
-}HashTable;
 
 typedef struct Obj {
     enum {

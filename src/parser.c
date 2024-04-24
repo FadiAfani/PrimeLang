@@ -663,7 +663,7 @@ ASTNode* parse_func_decl(Parser* parser) {
     ALLOC_SYMBOL(sym);
     INIT_FUNC_SYMBOL(sym->as_func_symbol);
     sym->type = SYMBOL_FUNCTION;
-    insert_top(&parser->scopes, (char*) id->value.arr, sym);
+    insert_top(&parser->scopes, id->value.arr, sym, id->value.size);
     FuncType* cur_ft = func_t->as_func_type;
     for (size_t i = 0; i < node->as_func_decl.parameters.size; i++) {
         Symbol* ps;
@@ -676,7 +676,7 @@ ASTNode* parse_func_decl(Parser* parser) {
         next->pt = id_node->p_type;
         cur_ft->next = next;
         cur_ft = next;
-        insert(&node->as_func_decl.block->as_block_expr.table, (char*) id_node->as_literal_expr->value.arr, ps);
+        insert(&node->as_func_decl.block->as_block_expr.table.ht, (char*) id_node->as_literal_expr->value.arr, ps, id_node->as_literal_expr->value.size);
 
     }
     cur_ft->next = NULL;

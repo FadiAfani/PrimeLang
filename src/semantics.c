@@ -33,7 +33,7 @@ void infer_literal_type(TypeChecker* tc, ASTNode* node) {
                  * if found simply return its type otherwise return NULL
                  * */
 
-                Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_literal_expr->value.arr);
+                Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_literal_expr->value.arr, node->as_literal_expr->value.size);
                 if (sym == NULL) {
                     Error err;
                     err.type = UNDEFINED_SYMBOL_ERROR;
@@ -68,7 +68,7 @@ static void check_valid_pattern(TypeChecker* tc, ASTNode* node) {
                 /* report pattern error */
                 return;
             }
-            sym = lookup_symbol(&tc->scopes, (char*) pat->as_literal_expr->value.arr);
+            sym = lookup_symbol(&tc->scopes, (char*) pat->as_literal_expr->value.arr, pat->as_literal_expr->value.size);
             infer_expr_type(tc, node->as_bin_expr.right);
             sym->as_var_symbol = node->as_bin_expr.right->p_type;
             break;
@@ -217,7 +217,7 @@ void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
         return;
     }
     ALLOC_TYPE(node->p_type);
-    Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_func_call.func_id->value.arr);
+    Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_func_call.func_id->value.arr, node->as_func_call.func_id->value.size);
     if (sym == NULL) {
         //TODO: report error
         return;

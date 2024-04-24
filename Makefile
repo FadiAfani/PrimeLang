@@ -16,7 +16,7 @@ compile: $(OBJS)
 main: $(BUILD_DIR)/*.o
 	gcc $^ -o $(BINS)/$@ -g
 
-test_ct: $(BUILD_DIR)/constant_table.o $(TEST_DIR)/test_ct.c
+test_ct: $(BUILD_DIR)/constant_table.o $(BUILD_DIR)/hash_table.o $(TEST_DIR)/test_ct.c
 	gcc $^ -o $(TEST_BINS)/$@ -lcriterion
 	./$(TEST_BINS)/test_ct
 
