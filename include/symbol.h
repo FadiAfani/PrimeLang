@@ -3,16 +3,20 @@
 
 #include "vector.h"
 #include "type.h"
+#include "llist.h"
 
 #define LOAD_FACTOR 0.8
 
+#define ALLOC_SYMBOL(ptr) (ALLOCATE(ptr, Symbol, 1))
+
+typedef struct Symbol Symbol;
 
 typedef enum SymbolType {
     SYMBOL_TYPE,
     SYMBOL_VARIABLE,
     SYMBOL_FUNCTION,
     SYMBOL_ENUM,
-    SYMBOL_PARAMETER
+    SYMBOL_PARAMETER,
 
 }SymbolType;
 
@@ -21,10 +25,15 @@ typedef enum SymbolType {
  * func_type is the function's type 
 */
 
+
 typedef struct FuncSymbol {
-    Vector parameters;
+    Param* param_list;
+    Arg* applied_args;
     PrimeType* func_type;
+    int pc;
+    Token* parent_func;
 }FuncSymbol;
+
 
 
 typedef struct Symbol {
@@ -41,11 +50,14 @@ typedef struct Symbol {
 }Symbol;
 
 #define INIT_FUNC_SYMBOL(fs) ({ \
-    INIT_VECTOR(fs.parameters, Symbol*); \
-    ALLOC_TYPE(fs.func_type); \
+    fs.param_list = NULL; \
+    fs.applied_args = NULL; \
+    fs.func_type = NULL; \
+    fs.parent_func = NULL; \
+    fs.pc = 0; \
 })
 
 
-#define ALLOC_SYMBOL(ptr) (ALLOCATE(ptr, Symbol, 1))
+void print_symbol(Symbol* symbol);
 
 #endif

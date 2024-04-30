@@ -73,6 +73,7 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         {
             Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_id_literal.id_token->value.arr, node->as_id_literal.id_token->value.size);
             APPEND(compiler->code, OP_LOADL, uint8_t);
+            printf("local index: %d\n", sym->local_index);
             MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
             break;
 
@@ -86,17 +87,22 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
 
     /* compile args */
     // TODO: fix arg position (not stacked correctly)
-    for (size_t i = 0; i < node->as_func_call.params.size; i++) {
-        compile_expr(INDEX_VECTOR(node->as_func_call.params, ASTNode*, i), compiler);
-    }
-    
     
     if (strcmp((char*) node->as_func_call.func_id->value.arr, "print") == 0) {
+
+        Arg* al = node->as_func_call.arg_list;
+        while (al != NULL) {
+            compile_expr(al->expr, compiler);
+            al = al->next;
+        }
+    
         APPEND(compiler->code, OP_CALL_NATIVE, uint8_t);
         APPEND(compiler->code, NATIVE_PRINT, uint8_t);
-        APPEND(compiler->code, (uint8_t) node->as_func_call.params.size, uint8_t);
-        for (size_t i = 0; i < node->as_func_call.params.size; i++) {
-            ASTNode* arg = INDEX_VECTOR(node->as_func_call.params, ASTNode*, i);
+        APPEND(compiler->code, (uint8_t) node->as_func_call.argc, uint8_t);
+        al = node->as_func_call.arg_list;
+        while (al != NULL) {
+            ASTNode* arg = al->expr;
+            al = al->next;
             //TODO: handle non-built-ins
             switch(arg->p_type->type_kind) {
                 case BUILT_IN:
@@ -117,18 +123,48 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
                     }
                     break;
                 default:
+                    printf("unprintable type\n");
                     exit(EXIT_FAILURE);
                 }
         }
         return;
     }
-    Const* c = lookup(&compiler->consts, (char*) node->as_func_call.func_id->value.arr, node->as_func_call.func_id->value.size);
+    void* key = node->as_func_call.func_id->value.arr;
+    int ksize = node->as_func_call.func_id->value.size;
+    Symbol* sym = lookup_symbol(&compiler->scopes, (char*) key, ksize);
+    Const* c;
+    if (sym->as_func_symbol.parent_func == NULL) {
+
+        c = lookup(&compiler->consts, key, ksize);
+        Arg* al = node->as_func_call.arg_list;
+        while (al != NULL) {
+            compile_expr(al->expr, compiler);
+            al = al->next;
+        }
+
+    } else {
+
+        Token* pf = sym->as_func_symbol.parent_func;
+        c = lookup(&compiler->consts, pf->value.arr, pf->value.size);
+        Arg* al = sym->as_func_symbol.applied_args;
+        while (al != NULL) {
+            compile_expr(al->expr, compiler);
+            al = al->next;
+        }
+        al = node->as_func_call.arg_list;
+        while (al != NULL) {
+            compile_expr(al->expr, compiler);
+            al = al->next;
+        }
+    }
+
+
+
     APPEND(compiler->code, OP_CONST, uint8_t);
     uint8_t lsbs = 0xFF & c->const_index;
     uint8_t msbs = c->const_index >> 8;
     APPEND(compiler->code, lsbs, uint8_t);
     APPEND(compiler->code, msbs, uint8_t);
-   
     APPEND(compiler->code, OP_CALL, uint8_t);
 
 
@@ -149,6 +185,7 @@ void compile_block_expr(ASTNode* node, Compiler* compiler) {
                 compiler
         );
     }
+    pop_scope(&compiler->scopes);
 
 }
 
@@ -262,7 +299,7 @@ void compile_function(ASTNode* node, Compiler* compiler) {
     c->as_string_const = (char*) node->as_func_decl.sym_id->value.arr;
     c->type = FUNC_CONST;
     c->const_index = compiler->consts.size + 1;
-    insert(&compiler->consts, &c->as_string_const, c, node->as_func_decl.sym_id->value.size);
+    insert(&compiler->consts, c->as_string_const, c, node->as_func_decl.sym_id->value.size);
 
     Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_func_decl.sym_id->value.arr, node->as_func_decl.sym_id->value.size);
     /* compile the function's block */
@@ -297,7 +334,7 @@ void compile_function(ASTNode* node, Compiler* compiler) {
 
     APPEND(c->bytes, FUNC_TAG, uint8_t); // tag
     MEMCPY_VECTOR(c->bytes, &c->const_index, sizeof(uint16_t), uint8_t);
-    APPEND(c->bytes, (uint8_t) node->as_func_decl.parameters.size, uint8_t); // arity
+    APPEND(c->bytes, (uint8_t) sym->as_func_symbol.pc, uint8_t); // arity
     size_t insts_size = lc.code.size; /* OP_RET + params * (OP_STORE + INDEX) */
     MEMCPY_VECTOR(c->bytes, &node->as_func_decl.block->as_block_expr.table.locals_count, sizeof(uint16_t), uint8_t); /* append number of locals to the code portion */
     MEMCPY_VECTOR(c->bytes, &insts_size, INSTS_SIZE, uint8_t); /* append size of the block's instruction section to compiler->data */

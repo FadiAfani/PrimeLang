@@ -39,6 +39,7 @@ Test(constant_table_tests, insert_multiple) {
     cr_expect(table.size == prev_size + n, "some constants were wrongly inserted or overwritten");
 }
 
+
 Test(constant_table_tests, test_reshash) {
     size_t prev_size = table.size;
     rehash(&table);

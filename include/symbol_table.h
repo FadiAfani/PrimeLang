@@ -17,7 +17,6 @@ struct SymbolTable {
 };
 
 
-void print_symbol(Symbol* symbol);
 void print_symbol_table(SymbolTable* table);
 void init_symbol_table(SymbolTable* table);
 

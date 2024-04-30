@@ -45,6 +45,7 @@ ASTNode* parse_program(Parser* parser);
 ASTNode* parse_param(Parser* parser);
 PrimeType* parse_type_annot(Parser* parser);
 PrimeType*   parse_type(Parser* parser);
+void register_pattern(Parser* parser, ASTNode* node);
 void parse_type_annotation(Parser* parser, ASTNode* node);
 void parse_type_constructor(Parser* parser, ASTNode* node);
 

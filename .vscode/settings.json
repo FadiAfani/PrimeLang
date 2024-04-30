@@ -3,6 +3,11 @@
         "*.c": "c",
         "vector.h": "c",
         "symbol_table.h": "c",
-        "token.h": "c"
-    }
+        "token.h": "c",
+        "type.h": "c",
+        "ast_node.h": "c",
+        "memory.h": "c",
+        "llist.h": "c"
+    },
+    "C_Cpp.dimInactiveRegions": false
 }

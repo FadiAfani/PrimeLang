@@ -1,6 +1,7 @@
 #include "../include/semantics.h"
 #include "../include/error.h"
 #include <string.h>
+#include <assert.h>
 
 void init_type_checker(TypeChecker* tc) {
     INIT_VECTOR(tc->semantic_errors, Error);
@@ -18,6 +19,7 @@ static bool compare_types(PrimeType* a, PrimeType* b) {
 void infer_literal_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* res;
     ALLOC_TYPE(res);
+    printf("type: %d\n", node->as_literal_expr->type);
     switch(node->as_literal_expr->type) {
         case INT_LIT:
             res->type_kind = BUILT_IN;
@@ -57,7 +59,10 @@ void infer_literal_type(TypeChecker* tc, ASTNode* node) {
 }
 
 
-
+/**
+ * checks if pattern is assignable
+ * modifies the node accordingly 
+*/
 static void check_valid_pattern(TypeChecker* tc, ASTNode* node) {
     if (node == NULL) return;
     ASTNode* pat = node->as_bin_expr.left;
@@ -69,8 +74,26 @@ static void check_valid_pattern(TypeChecker* tc, ASTNode* node) {
                 return;
             }
             sym = lookup_symbol(&tc->scopes, (char*) pat->as_literal_expr->value.arr, pat->as_literal_expr->value.size);
+            assert(sym != NULL);
             infer_expr_type(tc, node->as_bin_expr.right);
             sym->as_var_symbol = node->as_bin_expr.right->p_type;
+            pat->p_type = node->as_bin_expr.right->p_type;
+
+            if (node->as_bin_expr.right->type == FUNC_CALL_EXPR) {
+                Symbol* func = lookup_symbol(&tc->scopes, 
+                        node->as_bin_expr.right->as_func_call.func_id->value.arr, 
+                        node->as_bin_expr.right->as_func_call.func_id->value.size
+                );
+                int applied_args = node->as_bin_expr.right->as_func_call.argc;
+                if (applied_args < func->as_func_symbol.pc) {
+                    sym->as_func_symbol.applied_args = node->as_bin_expr.right->as_func_call.arg_list;
+                    sym->as_func_symbol.func_type = pat->p_type;
+                    sym->as_func_symbol.parent_func = node->as_bin_expr.right->as_func_call.func_id;
+                    sym->as_func_symbol.pc = func->as_func_symbol.pc - applied_args;
+                    sym->type = SYMBOL_FUNCTION;
+                }
+
+            }
             break;
 
         default:
@@ -78,10 +101,6 @@ static void check_valid_pattern(TypeChecker* tc, ASTNode* node) {
             exit(EXIT_FAILURE);
     }
 }
-/**
- * checks if pattern is assignable
- * modifies the node accordingly 
-*/
 void infer_binary_expr_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* expr_type;
     ALLOC_TYPE(expr_type);
@@ -210,9 +229,11 @@ void infer_block_type(TypeChecker* tc, ASTNode* node) {
 }
 
 void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
+    Arg* cur_arg = node->as_func_call.arg_list;
     if (strncmp(node->as_func_call.func_id->value.arr, "print", 5) == 0) {
-        for (uint8_t i = 0; i < node->as_func_call.params.size; i++) {
-            infer_expr_type(tc, INDEX_VECTOR(node->as_func_call.params, ASTNode*, i));
+        while (cur_arg != NULL) {
+            infer_expr_type(tc, cur_arg->expr);
+            cur_arg = cur_arg->next;
         }
         return;
     }
@@ -222,11 +243,28 @@ void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
         //TODO: report error
         return;
     }
-    FuncType* res_t = sym->as_func_symbol.func_type->as_func_type;
-    for (uint8_t i = 0; i < node->as_func_call.params.size; i++) {
-        ASTNode* p = INDEX_VECTOR(node->as_func_call.params, ASTNode*, i);
+
+    FuncType* res_t;
+    if (sym->as_func_symbol.parent_func != NULL) {
+
+        Symbol* parent = lookup_symbol(&tc->scopes, 
+                sym->as_func_symbol.parent_func->value.arr, 
+                sym->as_func_symbol.parent_func->value.size
+        );
+
+        res_t = parent->as_func_symbol.func_type->as_func_type;
+        for (int i = 0; i < node->as_func_call.argc; i++) {
+            res_t = res_t->next;
+        }
+    } else {
+        res_t = sym->as_func_symbol.func_type->as_func_type;
+    }
+    Arg* args = node->as_func_call.arg_list;
+    while (args != NULL) {
+        ASTNode* p = args->expr;
         infer_expr_type(tc, p);
         res_t = res_t->next;
+        args = args->next;
     }
     if (res_t->next == NULL) {
         node->p_type = res_t->pt;

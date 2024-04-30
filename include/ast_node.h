@@ -2,10 +2,11 @@
 #define AST_NODE_H
 
 #include "token.h"
-#include "symbol.h"
 #include "symbol_table.h"
+#include "llist.h"
 
-#define ALLOC_NODE(ptr) (ALLOCATE(ptr, ASTNode, 1));
+#define ALLOC_NODE(ptr) (ALLOCATE(ptr, ASTNode, 1))
+
 
 typedef enum NodeType {
     BIN_EXPR,
@@ -35,8 +36,6 @@ typedef enum NodeType {
 
 }NodeType;
 
-typedef struct ASTNode ASTNode;
-typedef struct Symbol Symbol;
 typedef struct TypeList TypeList;
 
 typedef struct IdentifierExpr {
@@ -95,9 +94,13 @@ typedef struct RangeExpr {
 
 }RangeExpr;
 
+
+
+
 typedef struct FuncCallExpr {
     Token* func_id;
-    Vector params;
+    Arg* arg_list;
+    int argc;
 
 }FuncCallExpr;
 
@@ -119,7 +122,7 @@ typedef struct TypeDecl {
 typedef struct FuncDecl {
     Token* sym_id;
     ASTNode* block;
-    Vector parameters; // vector of ASTNode*
+    Param* params;
 }FuncDecl;
 
 
@@ -147,6 +150,9 @@ struct ASTNode {
     NodeType type;
     PrimeType* p_type;
 };
+
+
+
 void init_block(ASTNode* node);
 void init_func_decl(ASTNode* node);
 

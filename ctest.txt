@@ -1,1 +1,9 @@
-print(5 * 9)
+f :: (x: int) -> (y: int) -> int {
+    x * y
+}
+
+z = f (3)
+k = z (4)
+
+
+print(k)

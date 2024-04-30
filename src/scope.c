@@ -1,4 +1,5 @@
 #include "../include/scope.h"
+#include <assert.h>
 
 void push_scope(ScopeStack* scopes, SymbolTable* table) {
     if (scopes->sp < MAX_STACK_SIZE - 1) {
@@ -23,7 +24,10 @@ Symbol* lookup_symbol(ScopeStack* scopes, char* key, int ksize) {
 }
 
 void insert_top(ScopeStack* scopes, char* key, Symbol* value, int ksize) {
+    SymbolTable* top = scopes->stack[scopes->sp];
+    assert(top != NULL && key != NULL && value != NULL);
     if (NULL == lookup_symbol(scopes, key, ksize)) {
+        value->local_index = top->locals_count++;
         insert(&scopes->stack[scopes->sp]->ht, key, value, ksize);
     }
 

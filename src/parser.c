@@ -5,6 +5,7 @@
 #include "../include/error.h"
 #include "../include/type.h"
 #include "../include/scope.h"
+#include "../include/llist.h"
 #include <stdbool.h>
 
 #define READ_TOKEN(parser) (&(INDEX_VECTOR(parser->lexer.tokens, Token, parser->cursor)))
@@ -108,23 +109,6 @@ void print_node(ASTNode* node, int depth) {
                 printf("\t");
             }
             //print_symbol(node->as_type_decl.symbol);
-            break;
-
-        case FUNC_DECL:
-            printf("<func-decl>\n");
-            Vector vec = node->as_func_decl.parameters;
-            for(size_t i = 0; i < vec.size; i++) {
-                //print_node((INDEX_VECTOR(vec, ASTNode*, i)), depth + 1);
-            }
-            print_node(node->as_func_decl.block, depth + 1);
-            break;
-        case FUNC_CALL_EXPR:
-            printf("<func-call>\n");
-            print_token(*node->as_func_call.func_id);
-            for (size_t i = 0; i < node->as_func_call.params.size; i++) {
-                print_node(INDEX_VECTOR(node->as_func_call.params, ASTNode*, i), depth + 1);
-            }
-
             break;
 
         case PREDEFINED_TYPE:
@@ -574,7 +558,8 @@ ASTNode* parse_func_call(Parser* parser) {
     node->end_tok = node->start_tok;
     node->type = FUNC_CALL_EXPR;
     node->as_func_call.func_id = id_tok;
-    INIT_VECTOR(node->as_func_call.params, ASTNode*);
+    ALLOC_ARG(node->as_func_call.arg_list);
+    node->as_func_call.argc = 0;
     ASTNode* arg = parse_grouped_expr(parser);
     if (arg == NULL) {
         APPEND(parser->parsing_errors,
@@ -588,12 +573,17 @@ ASTNode* parse_func_call(Parser* parser) {
         free_ast_node(node);
         return NULL;
     }
-    APPEND(node->as_func_call.params, arg, ASTNode*);
+    Arg* al = node->as_func_call.arg_list;
+    al->expr = arg;
+    al->next = NULL;
+    node->as_func_call.argc++;
+
 
     while(READ_TOKEN(parser)->type == LPAREN) {
         Token* tok = READ_TOKEN(parser);
         arg = parse_grouped_expr(parser);
-        APPEND(node->as_func_call.params, arg, ASTNode*);
+        append_arg(al, arg);
+        node->as_func_call.argc++;
     }
 
 
@@ -629,23 +619,35 @@ ASTNode* parse_func_decl(Parser* parser) {
 
     ASTNode* node;
     ALLOC_NODE(node);
-    INIT_VECTOR(node->as_func_decl.parameters, ASTNode*);
     node->as_func_decl.sym_id = id;
+    ALLOC_PARAM(node->as_func_decl.params);
     node->type = FUNC_DECL;
     node->p_type = NULL;
+
+
 
     // init FuncType
     PrimeType* func_t;
     ALLOC_TYPE(func_t);
     ALLOCATE(func_t->as_func_type, FuncType, 1);
 
+    // init symbol
+    Symbol* sym;
+    ALLOC_SYMBOL(sym);
+    INIT_FUNC_SYMBOL(sym->as_func_symbol);
+    ALLOC_PARAM(sym->as_func_symbol.param_list);
+
     // parse parameters
     ASTNode* p = parse_param(parser);
-    APPEND(node->as_func_decl.parameters, p, ASTNode*);
+    Param* pl = sym->as_func_symbol.param_list;
+    pl->lit = p;
+    pl->next = NULL;
+    sym->as_func_symbol.pc++;
     while (READ_TOKEN(parser)->type == ARROW && PEEK_NEXT(parser)->type == LPAREN) {
         consume(parser, ARROW);
         p = parse_param(parser);
-        APPEND(node->as_func_decl.parameters, p, ASTNode*);
+        append_param(pl, p);
+        sym->as_func_symbol.pc++;
     }
 
     if (!consume(parser, ARROW)) {
@@ -659,17 +661,18 @@ ASTNode* parse_func_decl(Parser* parser) {
         return NULL;
     }
     node->as_func_decl.block = parse_block(parser);
-    Symbol* sym;
-    ALLOC_SYMBOL(sym);
-    INIT_FUNC_SYMBOL(sym->as_func_symbol);
+    // the parameters are part of the locals
+    int* nlocs = &node->as_func_decl.block->as_block_expr.table.locals_count;
     sym->type = SYMBOL_FUNCTION;
     insert_top(&parser->scopes, id->value.arr, sym, id->value.size);
     FuncType* cur_ft = func_t->as_func_type;
-    for (size_t i = 0; i < node->as_func_decl.parameters.size; i++) {
+    Param* cur_param = pl;
+    for (size_t i = 0; i < sym->as_func_symbol.pc; i++) {
         Symbol* ps;
         ALLOC_SYMBOL(ps);
         ps->type = SYMBOL_PARAMETER;
-        ASTNode* id_node = INDEX_VECTOR(node->as_func_decl.parameters, ASTNode*, i);
+        ASTNode* id_node = cur_param->lit;
+        cur_param = cur_param->next;
         ps->as_var_symbol = id_node->p_type;
         FuncType* next;
         ALLOCATE(next, FuncType, 1);
@@ -677,7 +680,8 @@ ASTNode* parse_func_decl(Parser* parser) {
         cur_ft->next = next;
         cur_ft = next;
         insert(&node->as_func_decl.block->as_block_expr.table.ht, (char*) id_node->as_literal_expr->value.arr, ps, id_node->as_literal_expr->value.size);
-
+        ps->local_index = *nlocs;
+        (*nlocs)++;
     }
     cur_ft->next = NULL;
     func_t->type_kind = FUNC_KIND;
@@ -1089,9 +1093,23 @@ ASTNode* parse_param(Parser* parser) {
     ALLOC_NODE(node);
     node->as_literal_expr= t;
     node->p_type = pt;
-    node->type = IDENTIFIER;
+    node->type = LITERAL_EXPR;
 
     return node;
+}
+
+void register_pattern(Parser* parser, ASTNode* node) {
+    switch(node->type) {
+        case LITERAL_EXPR:
+            if (node->as_literal_expr->type == IDENTIFIER) {
+                Symbol* sym;
+                ALLOC_SYMBOL(sym);
+                sym->type = SYMBOL_VARIABLE;
+                insert_top(&parser->scopes, node->as_literal_expr->value.arr, sym, node->as_literal_expr->value.size);
+            }
+            break;
+        default: return;
+    }
 }
 
 
@@ -1105,6 +1123,7 @@ ASTNode* parse_assignment(Parser* parser) {
     if (!consume(parser, EQ)) {
         return left;
     }
+    register_pattern(parser, left);
     ASTNode* right = parse_comparison(parser);
     if (right == NULL) {
 
