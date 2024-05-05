@@ -19,7 +19,6 @@ static bool compare_types(PrimeType* a, PrimeType* b) {
 void infer_literal_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* res;
     ALLOC_TYPE(res);
-    printf("type: %d\n", node->as_literal_expr->type);
     switch(node->as_literal_expr->type) {
         case INT_LIT:
             res->type_kind = BUILT_IN;
@@ -91,6 +90,7 @@ static void check_valid_pattern(TypeChecker* tc, ASTNode* node) {
                     sym->as_func_symbol.parent_func = node->as_bin_expr.right->as_func_call.func_id;
                     sym->as_func_symbol.pc = func->as_func_symbol.pc - applied_args;
                     sym->type = SYMBOL_FUNCTION;
+                    pat->p_type->type_kind = FUNC_KIND;
                 }
 
             }
@@ -225,6 +225,7 @@ void infer_block_type(TypeChecker* tc, ASTNode* node) {
     ASTNode* last_expr = INDEX_VECTOR(node->as_block_expr.statements, ASTNode*, n - 1);
     infer_statement(tc, last_expr);
     node->p_type = last_expr->p_type;
+    pop_scope(&tc->scopes);
     return;
 }
 

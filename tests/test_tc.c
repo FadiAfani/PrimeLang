@@ -75,7 +75,7 @@ Test(typechecker_tests, test_block_type) {
 
 
 Test(typechecker_tests, test_function_currying) {
-    parser.lexer.src = "f :: (x: int) -> (y: int) -> int {x * y} \n x = f (3) ";
+    parser.lexer.src = "f :: (x: int) -> (y: int) -> int {x * y} \n z = f (3)";
     tokenize(&parser.lexer);
     ASTNode* root = parse_program(&parser);
     ASTNode* bin_expr = INDEX_VECTOR(root->as_compound_statements, ASTNode*, 1);

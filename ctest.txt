@@ -1,9 +1,7 @@
-f :: (x: int) -> (y: int) -> int {
+func :: (x: int) -> (y: int) -> int {
     x * y
 }
 
-z = f (3)
-k = z (4)
+x = func(7)
 
-
-print(k)
+print(x (10) )

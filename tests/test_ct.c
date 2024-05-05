@@ -1,6 +1,7 @@
 #include "../include/hash_table.h"
 #include "../include/constant_table.h"
 #include "criterion/criterion.h"
+#include "../include/parser.h"
 
 HashTable table;
 
@@ -57,3 +58,4 @@ Test(constant_table_tests, test_lookup) {
     Const* res = lookup(&table, &key, sizeof(int));
     cr_expect(res != NULL, "lookup function failed");
 }
+

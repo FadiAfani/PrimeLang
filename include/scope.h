@@ -17,5 +17,6 @@ void push_scope(ScopeStack* scopes, SymbolTable* syms);
 SymbolTable* pop_scope(ScopeStack* scopes);
 Symbol* lookup_symbol(ScopeStack* scopes, char* key, int ksize);
 void insert_top(ScopeStack* scopes, char* key, Symbol* value, int ksize);
+Symbol* lookup_top(ScopeStack* scopes, char* key, int ksize);
 
 #endif

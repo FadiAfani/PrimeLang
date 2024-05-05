@@ -4,6 +4,7 @@
 #include "../include/vm.h"
 #include  <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #define INSTS_SIZE 4
 #define INT_CONST_SIZE (sizeof(int) + 3)
@@ -73,7 +74,6 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         {
             Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_id_literal.id_token->value.arr, node->as_id_literal.id_token->value.size);
             APPEND(compiler->code, OP_LOADL, uint8_t);
-            printf("local index: %d\n", sym->local_index);
             MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
             break;
 
@@ -159,7 +159,6 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
     }
 
 
-
     APPEND(compiler->code, OP_CONST, uint8_t);
     uint8_t lsbs = 0xFF & c->const_index;
     uint8_t msbs = c->const_index >> 8;
@@ -190,6 +189,7 @@ void compile_block_expr(ASTNode* node, Compiler* compiler) {
 }
 
 void compile_assignment(ASTNode* node, Compiler* compiler) {
+    assert(compiler->scopes.sp == 0);
     switch(node->as_bin_expr.left->type) {
         case LITERAL_EXPR:
         {
