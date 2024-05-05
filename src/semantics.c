@@ -16,6 +16,7 @@ static bool compare_types(PrimeType* a, PrimeType* b) {
     }
     return false;
 }
+
 void infer_literal_type(TypeChecker* tc, ASTNode* node) {
     PrimeType* res;
     ALLOC_TYPE(res);
@@ -275,6 +276,33 @@ void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
 
 }
 
+void infer_if_expr(TypeChecker* tc, ASTNode* node) {
+    infer_expr_type(tc, node->as_if_expr.cond);
+    infer_expr_type(tc, node->as_if_expr.expr);
+    PrimeType* bt = node->as_if_expr.expr->p_type;
+    for (size_t i = 0; i < node->as_if_expr.else_ifs.size; i++) {
+        ASTNode* elif = INDEX_VECTOR(node->as_if_expr.else_ifs, ASTNode*, i);
+        infer_expr_type(tc, elif->as_if_expr.cond);
+        infer_expr_type(tc, elif->as_if_expr.expr);
+        PrimeType* elif_t = node->as_if_expr.expr->p_type;
+        if (compare_types(bt, elif_t) == false) {
+            //TODO: report a type error 
+        }
+        bt = elif_t;
+    }
+    if (node->as_if_expr.else_expr != NULL) {
+        infer_expr_type(tc, node->as_if_expr.else_expr);
+        if (false == compare_types(bt, node->as_if_expr.else_expr->p_type)) {
+            // TODO: report error
+            node->p_type = NULL;
+        } else {
+            node->p_type = bt;
+        }
+    } else {
+        node->p_type = bt;
+    }
+}
+
 
 void infer_expr_type(TypeChecker* tc, ASTNode* node) {
     switch(node->type) {
@@ -292,6 +320,9 @@ void infer_expr_type(TypeChecker* tc, ASTNode* node) {
             break;
         case BLOCK_EXPR:
             infer_block_type(tc, node);
+            break;
+        case IF_EXPR:
+            infer_if_expr(tc, node);
             break;
         case FUNC_CALL_EXPR:
             infer_func_call_type(tc, node);

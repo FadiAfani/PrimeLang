@@ -92,6 +92,27 @@ Test(typechecker_tests, test_function_currying) {
 
 }
 
+Test(typechecker_tests, test_basic_int_if_type) {
+    parser.lexer.src = "if 2 > 1 then 5 * 6";
+    tokenize(&parser.lexer);
+    ASTNode* root = parse_program(&parser);
+    ASTNode* if_expr = INDEX_VECTOR(root->as_compound_statements, ASTNode*, 0);
+    infer_program(&tc, root);
+    cr_assert(if_expr->as_if_expr.cond->p_type->as_built_in_type == INT_TYPE);
+    cr_assert(if_expr->p_type->as_built_in_type == INT_TYPE);
+
+}
+
+Test(typechecker_tests, test_if_type_with_else) {
+    parser.lexer.src = "if 2 > 1 then 5 * 6 else 2 * 10";
+    tokenize(&parser.lexer);
+    ASTNode* root = parse_program(&parser);
+    ASTNode* if_expr = INDEX_VECTOR(root->as_compound_statements, ASTNode*, 0);
+    infer_program(&tc, root);
+    cr_assert(if_expr->as_if_expr.cond->p_type->as_built_in_type == INT_TYPE);
+    cr_assert(if_expr->p_type->as_built_in_type == INT_TYPE);
+}
+
 Test(type_checker_tests, test_int_double_mult) {
     parser.lexer.src = "1.5 * 4";
     tokenize(&parser.lexer);

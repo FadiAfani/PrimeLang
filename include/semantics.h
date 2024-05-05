@@ -24,5 +24,6 @@ void infer_block_type(TypeChecker* tc, ASTNode* node);
 void infer_func_call_type(TypeChecker* tc, ASTNode* node);
 void infer_statement(TypeChecker* tc, ASTNode* node);
 void infer_program(TypeChecker* tc, ASTNode* node);
+void infer_if_expr(TypeChecker* tc, ASTNode* node);
 
 #endif
