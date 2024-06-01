@@ -405,6 +405,10 @@ void tokenize(Lexer* lexer) {
                     APPEND(lexer->tokens, tok, Token);
                     break;
                 }
+            case 2:
+                lexer->cursor++;
+                lexer->pos.col++;
+                break;
 
             default:
                 if (isdigit(c)) {

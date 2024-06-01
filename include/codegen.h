@@ -39,6 +39,7 @@ void compile_expr(ASTNode*, Compiler* compiler);
 void compile_function(ASTNode* node, Compiler* compiler);
 void compile_statement(ASTNode* node, Compiler* compiler);
 void compile_program(ASTNode* node, Compiler* compiler);
+void compile_if_expr(ASTNode* node, Compiler* compiler);
 void write_compiler_data(char* filename, Compiler* compiler);
 void init_compiler(Compiler* compiler);
 void free_compiler(Compiler* compiler);

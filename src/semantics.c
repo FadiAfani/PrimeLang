@@ -232,14 +232,15 @@ void infer_block_type(TypeChecker* tc, ASTNode* node) {
 
 void infer_func_call_type(TypeChecker* tc, ASTNode* node) {
     Arg* cur_arg = node->as_func_call.arg_list;
+    ALLOC_TYPE(node->p_type);
     if (strncmp(node->as_func_call.func_id->value.arr, "print", 5) == 0) {
         while (cur_arg != NULL) {
             infer_expr_type(tc, cur_arg->expr);
             cur_arg = cur_arg->next;
         }
+        node->p_type->as_built_in_type = UNIT_TYPE;
         return;
     }
-    ALLOC_TYPE(node->p_type);
     Symbol* sym = lookup_symbol(&tc->scopes, (char*) node->as_func_call.func_id->value.arr, node->as_func_call.func_id->value.size);
     if (sym == NULL) {
         //TODO: report error
@@ -280,11 +281,13 @@ void infer_if_expr(TypeChecker* tc, ASTNode* node) {
     infer_expr_type(tc, node->as_if_expr.cond);
     infer_expr_type(tc, node->as_if_expr.expr);
     PrimeType* bt = node->as_if_expr.expr->p_type;
+    assert(bt != NULL);
     for (size_t i = 0; i < node->as_if_expr.else_ifs.size; i++) {
         ASTNode* elif = INDEX_VECTOR(node->as_if_expr.else_ifs, ASTNode*, i);
         infer_expr_type(tc, elif->as_if_expr.cond);
         infer_expr_type(tc, elif->as_if_expr.expr);
         PrimeType* elif_t = node->as_if_expr.expr->p_type;
+        assert(elif_t != NULL);
         if (compare_types(bt, elif_t) == false) {
             //TODO: report a type error 
         }

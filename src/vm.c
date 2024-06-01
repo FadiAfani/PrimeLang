@@ -196,13 +196,13 @@ void run(VM* vm) {
 
         case OP_JMP_ABS:
         {
-            uint16_t addr = READ_BYTE(vm) << 8 | READ_BYTE(vm);
+            uint16_t addr = READ_16(vm);
             vm->ip = addr;
             break;
         }
         case OP_JMP_REL: /* short jump */
         {
-            uint16_t addr = READ_BYTE(vm) << 8 | READ_BYTE(vm);
+            uint16_t addr = READ_16(vm);
             vm->ip += addr;
             break;
         }
@@ -213,10 +213,10 @@ void run(VM* vm) {
             Value b = POP(vm);
             Value res;
 
-            if (b.as_int - a.as_int > 0) {
-                res.as_int = 1;
-            } else if (b.as_int - a.as_int < 0) {
+            if (b.as_int > a.as_int) {
                 res.as_int = -1;
+            } else if (b.as_int < a.as_int) {
+                res.as_int = 1;
             } else {
                 res.as_int = 0;
             }
@@ -241,25 +241,67 @@ void run(VM* vm) {
             break;
         }
 
+        case OP_EQ:
+        {
+            Value res = POP(vm);
+            if (res.as_int == 0) {
+                PUSH(vm, ((Value) {.as_bool = true }));
+            }
+            break;
+
+        }
+
+        case OP_BT:
+        {
+            Value res = POP(vm);
+            PUSH(vm, ((Value) {.as_bool = res.as_int == -1 }));
+            break;
+
+        }
+
+        case OP_BTE:
+        {
+            Value res = POP(vm);
+            PUSH(vm, ((Value) {.as_bool = res.as_int == -1 || res.as_int == 0}));
+            break;
+
+        }
+
+        case OP_LT:
+        {
+            Value res = POP(vm);
+            PUSH(vm, ((Value) {.as_bool = res.as_int == 1}));
+            break;
+
+        }
+
+        case OP_LTE:
+        {
+            Value res = POP(vm);
+            PUSH(vm, ((Value) {.as_bool = res.as_int == 1 || res.as_int == 0}));
+            break;
+
+        }
+
 
         case OP_COND_JMP_ABS:
         {
             Value cond = POP(vm);
-            uint16_t addr = READ_BYTE(vm) << 8 | READ_BYTE(vm);
+            uint16_t addr = READ_16(vm);
             if (cond.as_bool) vm->ip = addr;
             break;
         }
         case OP_JMP_REL_FALSE:
         {
             Value cond = POP(vm);
-            int16_t addr = READ_BYTE(vm) << 8 | READ_BYTE(vm); // signed ints to handle negative jumps
+            int16_t addr = READ_16(vm); // signed ints to handle negative jumps
             if (!cond.as_bool) vm->ip += addr;
             break;
         }
         case OP_JMP_REL_TRUE:
         {
             Value cond = POP(vm);
-            int16_t addr = READ_BYTE(vm) << 8 | READ_BYTE(vm); // signed ints to handle negative jumps
+            int16_t addr = READ_16(vm); // signed ints to handle negative jumps
             if (cond.as_bool) vm->ip += addr;
             break;
         }

@@ -1,7 +1,7 @@
-func :: (x: int) -> (y: int) -> int {
-    x * y
+x = 10
+
+if x > 15 then {
+    print(1)
+} elif x > 3 then {
+    print(2)
 }
-
-x = func(7)
-
-print(x (10) )

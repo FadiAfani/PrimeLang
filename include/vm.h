@@ -62,7 +62,12 @@ typedef enum OpCode {
     OP_APPEND_LIST,
     OP_MK_STRUCT ,
     OP_ACCESS_FIELD,
-    OP_SET_FIELD
+    OP_SET_FIELD,
+    OP_BT,
+    OP_BTE,
+    OP_LT,
+    OP_LTE,
+    OP_EQ
 }OpCode;
 
 

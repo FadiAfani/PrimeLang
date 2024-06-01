@@ -11,6 +11,29 @@
 #define DOUBLE_CONST_SIZE (sizeof(double) + 3)
 
 
+static void cpy_comp(Compiler* dest, Compiler* src) {
+    MEMCPY_VECTOR(dest->code, src->code.arr, src->code.size, uint8_t);
+    for (size_t i = 0; i < src->consts.capacity; i++) {
+        Entry* e = src->consts.arr[i];
+        if (e != NULL) {
+            Const* c;
+            ALLOC_CONST(c);
+            memcpy(c, e->value, sizeof(Const));
+            c->const_index = dest->consts.size + 1;
+            insert(&dest->consts, &c->as_string_const, c, e->size);
+        }
+        
+    }
+
+}
+
+/* <constant format>
+ * 
+ * <tag> 1 byte
+ * <index> 2 bytes
+ * <value> variable
+ */
+
 void compile_literal(ASTNode* node, Compiler* compiler) {
     Const* c;
     ALLOC_CONST(c);
@@ -227,6 +250,26 @@ void compile_binary_expr(ASTNode* node, Compiler* compiler) {
                         case DIV:
                             APPEND(compiler->code, OP_DIV_I, uint8_t);
                             break;
+                        case BT:
+                            APPEND(compiler->code, OP_CMP_I, uint8_t);
+                            APPEND(compiler->code, OP_BT, uint8_t);
+                            break;
+                        case BTE:
+                            APPEND(compiler->code, OP_CMP_I, uint8_t);
+                            APPEND(compiler->code, OP_BTE, uint8_t);
+                            break;
+                        case LT:
+                            APPEND(compiler->code, OP_CMP_I, uint8_t);
+                            APPEND(compiler->code, OP_LT, uint8_t);
+                            break;
+                        case LTE:
+                            APPEND(compiler->code, OP_CMP_I, uint8_t);
+                            APPEND(compiler->code, OP_LTE, uint8_t);
+                            break;
+                        case EQ:
+                            APPEND(compiler->code, OP_CMP_I, uint8_t);
+                            APPEND(compiler->code, OP_EQ, uint8_t);
+                            break;
                         default: 
                             printf("unexpected type: cannot compile\n");
                             break;
@@ -248,6 +291,26 @@ void compile_binary_expr(ASTNode* node, Compiler* compiler) {
                             break;
                         case DIV:
                             APPEND(compiler->code, OP_DIV_F, uint8_t);
+                            break;
+                        case BT:
+                            APPEND(compiler->code, OP_CMP_F, uint8_t);
+                            APPEND(compiler->code, OP_BT, uint8_t);
+                            break;
+                        case BTE:
+                            APPEND(compiler->code, OP_CMP_F, uint8_t);
+                            APPEND(compiler->code, OP_BTE, uint8_t);
+                            break;
+                        case LT:
+                            APPEND(compiler->code, OP_CMP_F, uint8_t);
+                            APPEND(compiler->code, OP_LT, uint8_t);
+                            break;
+                        case LTE:
+                            APPEND(compiler->code, OP_CMP_F, uint8_t);
+                            APPEND(compiler->code, OP_LTE, uint8_t);
+                            break;
+                        case EQ:
+                            APPEND(compiler->code, OP_CMP_F, uint8_t);
+                            APPEND(compiler->code, OP_EQ, uint8_t);
                             break;
                         default: 
                             printf("unexpected type: cannot compiled\n");
@@ -279,16 +342,23 @@ void compile_expr(ASTNode* node, Compiler* compiler) {
         case BLOCK_EXPR: 
             compile_block_expr(node, compiler);
             break;
+        case IF_EXPR:
+            compile_if_expr(node, compiler);
+            break;
         default:
-            printf("code generation is not yet implemented for this expression type\n");
+            printf("code generation is not yet implemented for this expression type: %d\n", node->type);
             break;
     }
 }
 
-/* Compiled Function Struecture
- * <tag> 1 byte
- * <arity> 1 byte
- * <compiled-block> 
+/* Compiled Function Format 
+ * <tag>            1 byte
+ * <index>          2 bytes
+ * <arity>          1 byte
+ * <locals>         2 bytes
+ * <code-size>      4 bytes
+ * <code-section>   <code-size> bytes
+ *
  * */
 
 void compile_function(ASTNode* node, Compiler* compiler) {
@@ -341,6 +411,43 @@ void compile_function(ASTNode* node, Compiler* compiler) {
     MEMCPY_VECTOR(c->bytes, lc.code.arr, lc.code.size, uint8_t); /* append the block's instructions */
 
     free_compiler(&lc);
+}
+
+void compile_if_expr(ASTNode* node, Compiler* compiler) {
+    size_t es = node->as_if_expr.else_ifs.size;
+    size_t jmp_holes[es + 1];
+    int jmps[es + 1];
+    ASTNode* cur_node;
+    for (size_t i = 0; i < es + 1; i++) {
+        Compiler lc;
+        init_compiler(&lc);
+        if (i == 0)
+            cur_node = node;
+        else
+            cur_node = INDEX_VECTOR(node->as_if_expr.else_ifs, ASTNode*, i - 1);
+
+        compile_expr(cur_node->as_if_expr.cond, compiler);
+        lc.consts.size = compiler->consts.size; // skip already assigned indices
+        compile_expr(cur_node->as_if_expr.expr, &lc);
+        APPEND(compiler->code, OP_JMP_REL_FALSE, uint8_t);
+        APPEND(compiler->code, lc.code.size & 0xFF, uint8_t);
+        APPEND(compiler->code, lc.code.size >> 8, uint8_t);
+        cpy_comp(compiler, &lc);
+        jmp_holes[i] = compiler->code.size;
+        compiler->code.size += 3; // skip jmp instruction 
+        free_compiler(&lc);
+    }
+    uint8_t* arr = compiler->code.arr;
+    for (size_t i = 0; i < es + 1; i++) {
+        size_t idx = jmp_holes[i];
+        arr[idx] = OP_JMP_REL;
+        arr[idx + 1] = jmps[idx] & 0xFF;
+        arr[idx + 2] = jmps[idx] >> 8;
+    }
+    if (node->as_if_expr.else_expr != NULL) {
+        compile_expr(node->as_if_expr.else_expr, compiler);
+    }
+    
 }
 
 
@@ -400,6 +507,7 @@ void write_compiler_data(char* filename, Compiler* compiler) {
     fclose(out);
 
 }
+
 
 void init_compiler(Compiler* compiler) {
     INIT_VECTOR(compiler->data, uint8_t);
