@@ -1,9 +1,6 @@
 #include <stddef.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <time.h>
-#include <string.h>
 
 #include "../include/vm.h"
 #include "../include/parser.h"
@@ -12,7 +9,7 @@
 #include "../include/error.h"
 #include "../include/prime_file_parser.h"
 #include "../include/semantics.h"
-#include <assert.h>
+#include "../include/disassembler.h"
 
 /* args
  * argv[1] - input file

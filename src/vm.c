@@ -1,12 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <time.h>
 
 #include "../include/vm.h"
 #include "../include/value.h"
 #include "../include/memory.h"
-#include "../include/prime_file_parser.h"
+
+#define DIS_FLAG
 
 VM* init_VM() {
     VM* vm;
@@ -35,6 +34,9 @@ void run(VM* vm) {
         switch (READ_BYTE(vm))
         {
         case OP_HALT:
+            #ifdef DIS_FLAG
+            printf("OP_HALT\n");
+            #endif
             return;
 
 
@@ -43,6 +45,11 @@ void run(VM* vm) {
             uint16_t index = READ_16(vm);
             Value val = vm->mem[index];
             PUSH(vm, val);
+
+            #ifdef DIS_FLAG
+            printf("OP_CONST %d\n", index);
+            #endif
+
             break;
             
         }
@@ -53,6 +60,11 @@ void run(VM* vm) {
             uint16_t addr = READ_16(vm);
             int fs = vm->stack[vm->fp].as_int;
             vm->stack[vm->fp - fs + addr + 1] = val; 
+
+            #ifdef DIS_FLAG
+            printf("OP_STOREL %d\n", addr);
+            #endif
+
             break;
         }
             
@@ -61,7 +73,11 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, ((Value) {.as_int = a.as_int + b.as_int}));
-            //printf("add -> sp: %d, a: %f, b: %f\n", vm->sp, a.number, b.number);
+
+            #ifdef DIS_FLAG
+            printf("OP_ADD_I\n");
+            #endif
+
             break;
         }
 
@@ -70,7 +86,11 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, ((Value) {.as_double = a.as_double+ b.as_double}));
-            //printf("add -> sp: %d, a: %f, b: %f\n", vm->sp, a.number, b.number);
+
+            #ifdef DIS_FLAG
+            printf("OP_ADD_F\n");
+            #endif
+
             break;
         }
 
@@ -79,6 +99,11 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, ((Value) {.as_int = b.as_int - a.as_int}));
+
+            #ifdef DIS_FLAG
+            printf("OP_SUB_I\n");
+            #endif
+
             break;
         }
 
@@ -87,6 +112,11 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, ((Value) {.as_double = b.as_double - a.as_double}));
+
+            #ifdef DIS_FLAG
+            printf("OP_SUB_F\n");
+            #endif
+
             break;
         }
         case OP_MULT_I:
@@ -94,6 +124,11 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, (Value) {.as_int = b.as_int * a.as_int});
+
+            #ifdef DIS_FLAG
+            printf("OP_MULT_I\n");
+            #endif
+
             break;    
         }
         case OP_DIV_I:
@@ -101,6 +136,11 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, (Value) {.as_int = b.as_int / a.as_int});
+
+            #ifdef DIS_FLAG
+            printf("OP_DIV_I\n");
+            #endif
+
             break;
         }
         case OP_DIV_F:
@@ -108,14 +148,17 @@ void run(VM* vm) {
             Value a = POP(vm);
             Value b = POP(vm);
             PUSH(vm, (Value) {.as_double = b.as_double / a.as_double});
+
+            #ifdef DIS_FLAG
+            printf("OP_DIV_F\n");
+            #endif
+
             break;
         }
         case OP_CALL:
         {
             Value label_ptr = POP(vm);
-            //printf("start: %d\n", vm->sp);
             FuncObj* funcRef = (FuncObj*) label_ptr.as_ref;
-            //printf("sp, fp: %d, %d\n", vm->sp, vm->fp);
             int frame_size = funcRef->loc_cnt + 5; // 3 = as_int + frame_size + prev_vm_loc
             int prev_fp = vm->fp;
             vm->fp = vm->sp - funcRef->arity + frame_size;
@@ -127,7 +170,11 @@ void run(VM* vm) {
             PUSH(vm, ((Value) {.as_int = frame_size})); // push frame size
             vm->code = funcRef->insts;
             vm->ip = 0;
-            //printf("call -> sp: %d, fp: %d, bottom: %d\n", vm->sp, vm->fp, prev_fp);
+
+            #ifdef DIS_FLAG
+            printf("OP_CALL\n");
+            #endif
+
             break;
         }
         case OP_CALL_NATIVE:
@@ -167,6 +214,10 @@ void run(VM* vm) {
                     
             }
 
+            #ifdef DIS_FLAG
+            printf("OP_CALL_NATIVE %d %d\n", addr, args_cnt);
+            #endif
+
             break;
         }
 
@@ -181,16 +232,23 @@ void run(VM* vm) {
             vm->sp = vm->fp - fs;
             vm->fp = vm->stack[vm->fp - 4].as_int;
             PUSH(vm, ret_val);
-            //printf("ret -> sp: %d, fp: %d\n", vm->sp, vm->fp);
+
+            #ifdef DIS_FLAG
+            printf("OP_RET\n");
+            #endif
+
             break;
         }
         case OP_LOADL:
         {
             uint16_t loc_addr = READ_16(vm);
             int fs = vm->stack[vm->fp].as_int;
-
-            //printf("bot: %d\n", stack_bottom.as_int);
             PUSH(vm, vm->stack[vm->fp - fs + loc_addr + 1]);
+
+            #ifdef DIS_FLAG
+            printf("OP_LOADL %d\n", loc_addr);
+            #endif
+
             break;
         }
 
@@ -198,12 +256,22 @@ void run(VM* vm) {
         {
             uint16_t addr = READ_16(vm);
             vm->ip = addr;
+
+            #ifdef DIS_FLAG
+            printf("OP_JMP_ABS %d\n", addr);
+            #endif
+
             break;
         }
         case OP_JMP_REL: /* short jump */
         {
             uint16_t addr = READ_16(vm);
             vm->ip += addr;
+
+            #ifdef DIS_FLAG
+            printf("OP_JMP_REL %d\n", addr);
+            #endif
+
             break;
         }
 
@@ -221,6 +289,11 @@ void run(VM* vm) {
                 res.as_int = 0;
             }
             PUSH(vm, res);
+
+            #ifdef DIS_FLAG
+            printf("OP_CMP_I\n");
+            #endif
+
             break;
         }
 
@@ -238,6 +311,12 @@ void run(VM* vm) {
                 res.as_int = 0;
             }
             PUSH(vm, res);
+
+
+            #ifdef DIS_FLAG
+            printf("OP_CMP_F\n");
+            #endif
+
             break;
         }
 
@@ -247,6 +326,10 @@ void run(VM* vm) {
             if (res.as_int == 0) {
                 PUSH(vm, ((Value) {.as_bool = true }));
             }
+
+            #ifdef DIS_FLAG
+            printf("OP_EQ\n");
+            #endif
             break;
 
         }
@@ -255,6 +338,11 @@ void run(VM* vm) {
         {
             Value res = POP(vm);
             PUSH(vm, ((Value) {.as_bool = res.as_int == -1 }));
+
+            #ifdef DIS_FLAG
+            printf("OP_BT\n");
+            #endif
+
             break;
 
         }
@@ -263,6 +351,11 @@ void run(VM* vm) {
         {
             Value res = POP(vm);
             PUSH(vm, ((Value) {.as_bool = res.as_int == -1 || res.as_int == 0}));
+
+            #ifdef DIS_FLAG
+            printf("OP_BTE\n");
+            #endif
+
             break;
 
         }
@@ -271,6 +364,11 @@ void run(VM* vm) {
         {
             Value res = POP(vm);
             PUSH(vm, ((Value) {.as_bool = res.as_int == 1}));
+
+            #ifdef DIS_FLAG
+            printf("OP_LT\n");
+            #endif
+
             break;
 
         }
@@ -279,6 +377,11 @@ void run(VM* vm) {
         {
             Value res = POP(vm);
             PUSH(vm, ((Value) {.as_bool = res.as_int == 1 || res.as_int == 0}));
+
+            #ifdef DIS_FLAG
+            printf("OP_LTE\n");
+            #endif
+
             break;
 
         }
@@ -289,6 +392,11 @@ void run(VM* vm) {
             Value cond = POP(vm);
             uint16_t addr = READ_16(vm);
             if (cond.as_bool) vm->ip = addr;
+
+            #ifdef DIS_FLAG
+            printf("OP_COND_JMP_ABS %d\n", addr);
+            #endif
+
             break;
         }
         case OP_JMP_REL_FALSE:
@@ -296,6 +404,11 @@ void run(VM* vm) {
             Value cond = POP(vm);
             int16_t addr = READ_16(vm); // signed ints to handle negative jumps
             if (!cond.as_bool) vm->ip += addr;
+
+            #ifdef DIS_FLAG
+            printf("OP_JMP_REL_FALSE %d\n", addr);
+            #endif
+
             break;
         }
         case OP_JMP_REL_TRUE:
@@ -303,6 +416,11 @@ void run(VM* vm) {
             Value cond = POP(vm);
             int16_t addr = READ_16(vm); // signed ints to handle negative jumps
             if (cond.as_bool) vm->ip += addr;
+
+            #ifdef DIS_FLAG
+            printf("OP_JMP_REL_TRUE %d\n", addr);
+            #endif
+
             break;
         }
         case OP_LOAD_OUTER:
@@ -315,9 +433,10 @@ void run(VM* vm) {
                 cur = cur->parent;
             }
 
-            //Value outer_val = lookup(cur->outerVals, addr);
-            //printf("arity: %d\n", outer_val.type);
-            //PUSH(vm, outer_val);
+            #ifdef DIS_FLAG
+            printf("OP_LOAD_OUTER %d\n", addr);
+            #endif
+
             break;
         }
         case OP_INDEX:
@@ -326,6 +445,11 @@ void run(VM* vm) {
            Value list_ref = POP(vm);
            ListObj* as_list_obj = list_ref.as_ref;
            PUSH(vm, as_list_obj->arr[idx.as_int]);
+
+            #ifdef DIS_FLAG
+            printf("OP_INDEX\n");
+            #endif
+
            break;
 
         }

@@ -24,6 +24,7 @@ static void cpy_comp(Compiler* dest, Compiler* src) {
         }
         
     }
+    
 
 }
 
@@ -416,7 +417,6 @@ void compile_function(ASTNode* node, Compiler* compiler) {
 void compile_if_expr(ASTNode* node, Compiler* compiler) {
     size_t es = node->as_if_expr.else_ifs.size;
     size_t jmp_holes[es + 1];
-    int jmps[es + 1];
     ASTNode* cur_node;
     for (size_t i = 0; i < es + 1; i++) {
         Compiler lc;
@@ -430,22 +430,26 @@ void compile_if_expr(ASTNode* node, Compiler* compiler) {
         lc.consts.size = compiler->consts.size; // skip already assigned indices
         compile_expr(cur_node->as_if_expr.expr, &lc);
         APPEND(compiler->code, OP_JMP_REL_FALSE, uint8_t);
-        APPEND(compiler->code, lc.code.size & 0xFF, uint8_t);
-        APPEND(compiler->code, lc.code.size >> 8, uint8_t);
+
+        /* account for the relative jump which exists the entire if expression */
+        APPEND(compiler->code, (lc.code.size + 3) & 0xFF, uint8_t);
+        APPEND(compiler->code, (lc.code.size + 3) >> 8, uint8_t);
         cpy_comp(compiler, &lc);
         jmp_holes[i] = compiler->code.size;
         compiler->code.size += 3; // skip jmp instruction 
         free_compiler(&lc);
     }
+    if (node->as_if_expr.else_expr != NULL) {
+        compile_expr(node->as_if_expr.else_expr, compiler);
+    }
+
+    size_t bottom = compiler->code.size;
     uint8_t* arr = compiler->code.arr;
     for (size_t i = 0; i < es + 1; i++) {
         size_t idx = jmp_holes[i];
-        arr[idx] = OP_JMP_REL;
-        arr[idx + 1] = jmps[idx] & 0xFF;
-        arr[idx + 2] = jmps[idx] >> 8;
-    }
-    if (node->as_if_expr.else_expr != NULL) {
-        compile_expr(node->as_if_expr.else_expr, compiler);
+        arr[idx] = OP_JMP_ABS;
+        arr[idx + 1] = bottom & 0xFF;
+        arr[idx + 2] = bottom >> 8;
     }
     
 }
