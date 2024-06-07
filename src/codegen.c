@@ -24,8 +24,15 @@ static void cpy_comp(Compiler* dest, Compiler* src) {
         }
         
     }
-    
+    for (int i = 0; i <= src->scopes.sp; i++) {
+        push_scope(&dest->scopes, src->scopes.stack[i]);
+    }
+}
 
+static void cpy_scopes(Compiler* dest, Compiler* src) {
+    for (int i = 0; i <= src->scopes.sp; i++) {
+        push_scope(&dest->scopes, src->scopes.stack[i]);
+    }
 }
 
 /* <constant format>
@@ -97,8 +104,13 @@ void compile_literal(ASTNode* node, Compiler* compiler) {
         case IDENTIFIER:
         {
             Symbol* sym = lookup_symbol(&compiler->scopes, (char*) node->as_id_literal.id_token->value.arr, node->as_id_literal.id_token->value.size);
-            APPEND(compiler->code, OP_LOADL, uint8_t);
-            MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
+            if (sym->outer_index < 0) {
+                APPEND(compiler->code, OP_LOADL, uint8_t);
+                MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
+            } else {
+                APPEND(compiler->code, OP_LOADH, uint8_t);
+                MEMCPY_VECTOR(compiler->code, &sym->outer_index, sizeof(uint16_t), uint8_t);
+            }
             break;
 
         }
@@ -201,6 +213,7 @@ void compile_func_call(ASTNode* node, Compiler* compiler) {
 */
 
 void compile_block_expr(ASTNode* node, Compiler* compiler) {
+    printf("stack pointer: %d", compiler->scopes.sp);
     push_scope(&compiler->scopes, &node->as_block_expr.table);
     for (size_t i = 0; i < node->as_block_expr.statements.size; i++) {
         compile_statement(
@@ -213,14 +226,18 @@ void compile_block_expr(ASTNode* node, Compiler* compiler) {
 }
 
 void compile_assignment(ASTNode* node, Compiler* compiler) {
-    assert(compiler->scopes.sp == 0);
     switch(node->as_bin_expr.left->type) {
         case LITERAL_EXPR:
         {
             compile_expr(node->as_bin_expr.right, compiler);
             Symbol* sym = lookup_symbol(&compiler->scopes, node->as_bin_expr.left->as_literal_expr->value.arr, node->as_bin_expr.left->as_literal_expr->value.size);
-            APPEND(compiler->code, OP_STOREL, uint8_t);
-            MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
+            if (sym->outer_index < 0) {
+                APPEND(compiler->code, OP_STOREL, uint8_t);
+                MEMCPY_VECTOR(compiler->code, &sym->local_index, sizeof(uint16_t), uint8_t);
+            } else {
+                APPEND(compiler->code, OP_STOREH, uint8_t);
+                MEMCPY_VECTOR(compiler->code, &sym->outer_index, sizeof(uint16_t), uint8_t);
+            }
             break;
         }
         default:
@@ -421,6 +438,7 @@ void compile_if_expr(ASTNode* node, Compiler* compiler) {
     for (size_t i = 0; i < es + 1; i++) {
         Compiler lc;
         init_compiler(&lc);
+        cpy_scopes(&lc, compiler);
         if (i == 0)
             cur_node = node;
         else
@@ -431,7 +449,7 @@ void compile_if_expr(ASTNode* node, Compiler* compiler) {
         compile_expr(cur_node->as_if_expr.expr, &lc);
         APPEND(compiler->code, OP_JMP_REL_FALSE, uint8_t);
 
-        /* account for the relative jump which exists the entire if expression */
+        /* account for the relative jump which skips the entire if expression */
         APPEND(compiler->code, (lc.code.size + 3) & 0xFF, uint8_t);
         APPEND(compiler->code, (lc.code.size + 3) >> 8, uint8_t);
         cpy_comp(compiler, &lc);

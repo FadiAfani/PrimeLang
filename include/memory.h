@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 
-#include "vm.h"
 
 #define SCALE_FACTOR 2
 
@@ -28,8 +27,6 @@
 		} \
 	ptr = new_ptr; \
 })
-
-#define INIT_DYN_ARR(ptr, type, capacity) (BUFF_DYN_ARR(ptr, capacity/2, type))
 
 #define FREE_VECTOR(vec) ({ \
     free(vec->arr); \

@@ -7,6 +7,7 @@
 #define N_NATIVE 2 
 
 #include "value.h"
+#include "vector.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -44,17 +45,15 @@ typedef enum OpCode {
     OP_EQ_CMP,
 	OP_RET,
     OP_LOADL,
-    OP_LOADG,
+    OP_LOADH,
     OP_STOREL, 
-    OP_STOREG,
+    OP_STOREH,
     OP_CALL,
     OP_MKCLSR,
     OP_LOADP,
     OP_JMP_REL_FALSE,
     OP_AND,
     OP_CALL_NATIVE,
-    OP_LOAD_OUTER,
-    OP_STORE_OUTER,
     OP_JMP_REL_TRUE,
     OP_INDEX,
     OP_MK_LIST,
@@ -72,19 +71,12 @@ typedef enum OpCode {
 
 
 
-// make it dynamic for now
-typedef struct DynamicArr {
-	Value* values;
-	size_t capacity;
-	size_t size;
-}DynamicArr;
-
 typedef struct VM {
 	Value stack[CALL_STACK_CAP];
 	Value* mem;
     uint8_t* code;
     NativeFuncObj nativeObjs[N_NATIVE];
-    Value* heap_area; /* linked-list that captures locals used by inner closures */
+    Vector heap;
 	int fp;
     int ip;
     int sp;

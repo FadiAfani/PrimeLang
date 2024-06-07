@@ -25,6 +25,9 @@ VM* init_VM() {
 
     vm->nativeObjs[0] = native_print_int;
     vm->nativeObjs[1] = native_time;
+
+    /*init heap area */
+    INIT_VECTOR(vm->heap, Value);
     return vm;
 }
 
@@ -65,6 +68,14 @@ void run(VM* vm) {
             printf("OP_STOREL %d\n", addr);
             #endif
 
+            break;
+        }
+
+        case OP_STOREH:
+        {
+            Value v = POP(vm);
+            uint16_t addr = READ_16(vm);
+            INSERT_AT(vm->heap, v, Value, addr);
             break;
         }
             
@@ -251,6 +262,13 @@ void run(VM* vm) {
 
             break;
         }
+        case OP_LOADH:
+        {
+            uint16_t addr = READ_16(vm);
+            Value v = INDEX_VECTOR(vm->heap, Value, addr);
+            PUSH(vm, v);
+            break;
+        }
 
         case OP_JMP_ABS:
         {
@@ -419,22 +437,6 @@ void run(VM* vm) {
 
             #ifdef DIS_FLAG
             printf("OP_JMP_REL_TRUE %d\n", addr);
-            #endif
-
-            break;
-        }
-        case OP_LOAD_OUTER:
-        {
-            uint8_t depth = READ_BYTE(vm);
-            uint16_t addr = READ_16(vm);
-            FuncObj* cur = vm->stack[vm->fp - 3].as_ref;
-
-            for (uint8_t i = 0; i < depth; i++) {
-                cur = cur->parent;
-            }
-
-            #ifdef DIS_FLAG
-            printf("OP_LOAD_OUTER %d\n", addr);
             #endif
 
             break;

@@ -11,6 +11,7 @@
 typedef struct ScopeStack {
     SymbolTable* stack[MAX_STACK_SIZE];
     int sp;
+    int outers;
 }ScopeStack;
 
 void push_scope(ScopeStack* scopes, SymbolTable* syms);
