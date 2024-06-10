@@ -393,6 +393,7 @@ void compile_function(ASTNode* node, Compiler* compiler) {
     /* compile the function's block */
     Compiler lc;
     init_compiler(&lc);
+    cpy_scopes(&lc, compiler);
     push_scope(&lc.scopes, &node->as_func_decl.block->as_block_expr.table);
 
 
@@ -414,8 +415,10 @@ void compile_function(ASTNode* node, Compiler* compiler) {
         Entry* lc_const = lc.consts.arr[i];
         if (lc_const != NULL) {
             /* treat the key as a sequence of chars hence the 'as_string_const */
-            c->const_index = compiler->consts.size + 1;
-            insert(&compiler->consts, ((Const*) lc_const->value)->as_string_const, lc_const->value, lc_const->size);
+            Const* lcc = lc_const->value;
+            lcc->const_index = compiler->consts.size + 1;
+            void* key = &lcc->as_string_const;
+            insert(&compiler->consts, key, lc_const->value, lc_const->size);
         }
     }  
 
@@ -497,7 +500,7 @@ void compile_program(ASTNode* node, Compiler* compiler) {
 
 /* Binary File Structure:
  * <constant-table-size> 2 bytes
- * <code-section-size> 8 bytes
+ * <code-section-size> 4 bytes
  * <data-bytes> 
  * <code-bytes> 
  * */
@@ -536,6 +539,7 @@ void init_compiler(Compiler* compiler) {
     INIT_VECTOR(compiler->code, uint8_t);
     init_hash_table(&compiler->consts);
     compiler->scopes.sp = -1;
+    compiler->scopes.outers = 0;
 }
 
 void free_compiler(Compiler* compiler) {

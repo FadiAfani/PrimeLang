@@ -2,6 +2,7 @@
 #include "../include/error.h"
 #include <string.h>
 #include <assert.h>
+#include <stdbool.h>
 
 void init_type_checker(TypeChecker* tc) {
     INIT_VECTOR(tc->semantic_errors, Error);

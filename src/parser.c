@@ -22,6 +22,7 @@ void init_parser(Parser* parser) {
     ALLOCATE(parser->parsing_errors.arr, Error, INIT_VECTOR_CAP);
     parser->cursor = 0;
     parser->scopes.sp = -1;
+    parser->scopes.outers = 0;
 }
 
 void free_ast_node(ASTNode* node) {
@@ -662,9 +663,9 @@ ASTNode* parse_func_decl(Parser* parser) {
     }
     node->as_func_decl.block = parse_block(parser);
     // the parameters are part of the locals
-    int* nlocs = &node->as_func_decl.block->as_block_expr.table.locals_count;
     sym->type = SYMBOL_FUNCTION;
     insert_top(&parser->scopes, id->value.arr, sym, id->value.size);
+    push_scope(&parser->scopes, &node->as_func_decl.block->as_block_expr.table);
     FuncType* cur_ft = func_t->as_func_type;
     Param* cur_param = pl;
     for (size_t i = 0; i < sym->as_func_symbol.pc; i++) {
@@ -679,10 +680,9 @@ ASTNode* parse_func_decl(Parser* parser) {
         next->pt = id_node->p_type;
         cur_ft->next = next;
         cur_ft = next;
-        insert(&node->as_func_decl.block->as_block_expr.table.ht, (char*) id_node->as_literal_expr->value.arr, ps, id_node->as_literal_expr->value.size);
-        ps->local_index = *nlocs;
-        (*nlocs)++;
+        insert_top(&parser->scopes, (char*) id_node->as_literal_expr->value.arr, ps, id_node->as_literal_expr->value.size);
     }
+    pop_scope(&parser->scopes);
     cur_ft->next = NULL;
     func_t->type_kind = FUNC_KIND;
     sym->as_func_symbol.func_type = func_t;

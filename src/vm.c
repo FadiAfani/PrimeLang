@@ -76,6 +76,11 @@ void run(VM* vm) {
             Value v = POP(vm);
             uint16_t addr = READ_16(vm);
             INSERT_AT(vm->heap, v, Value, addr);
+
+            #ifdef DIS_FLAG
+            printf("OP_STOREH %d\n", addr);
+            #endif
+
             break;
         }
             
@@ -267,6 +272,12 @@ void run(VM* vm) {
             uint16_t addr = READ_16(vm);
             Value v = INDEX_VECTOR(vm->heap, Value, addr);
             PUSH(vm, v);
+
+
+            #ifdef DIS_FLAG
+            printf("OP_LOADH %d\n", addr);
+            #endif
+
             break;
         }
 

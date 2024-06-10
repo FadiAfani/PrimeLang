@@ -1,7 +1,11 @@
-x = 10
-
-if 1 >= 1 then {
-    print(x)
+func :: (x: int) -> (y: int) -> int {
+    x * y
 }
+
+cur = func (10)
+
+print(cur (4) )
+
+
 
 

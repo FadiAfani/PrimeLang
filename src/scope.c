@@ -14,25 +14,29 @@ SymbolTable* pop_scope(ScopeStack* scopes) {
 }
 
 Symbol* lookup_symbol(ScopeStack* scopes, char* key, int ksize) {
-    for (int i = scopes->sp; i >= 0; i--) {
-        Symbol* sym = lookup(&scopes->stack[i]->ht, key, ksize);
-        if (sym != NULL) return sym;
+    Symbol* sym = NULL;
+    int i;
+    for (i = scopes->sp; i >= 0; i--) {
+        sym = lookup(&scopes->stack[i]->ht, key, ksize);
+        if (sym != NULL) break;
     }
 
-    return NULL;
+    if (i < scopes->sp && sym != NULL)
+        sym->outer_index = scopes->outers++;
+
+    return sym;
 }
+
 
 void insert_top(ScopeStack* scopes, char* key, Symbol* value, int ksize) {
     SymbolTable* top = scopes->stack[scopes->sp];
-    if (NULL == lookup(&top->ht, key, ksize)) {
+    if (NULL == lookup_symbol(scopes, key, ksize)) {
         value->local_index = top->locals_count++;
         value->outer_index = -1;
         insert(&top->ht, key, value, ksize);
-    } else {
-        value->outer_index = scopes->outers++;
-    }
-
+    } 
 }
+
 Symbol* lookup_top(ScopeStack* scopes, char* key, int ksize) {
     SymbolTable* top = scopes->stack[scopes->sp];
     return lookup(&top->ht, key, ksize);
